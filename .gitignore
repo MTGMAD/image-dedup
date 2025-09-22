@@ -45,3 +45,9 @@ Thumbs.db
 *.log
 test_images/
 temp/
+
+# Large executables (use GitHub releases instead)
+release_packages/*.exe
+dist/*.exe
+build/
+*.spec
