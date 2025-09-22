@@ -6,9 +6,13 @@ A cross-platform Python application to find and manage duplicate images using pe
 
 - **Cross-platform**: Works on Windows, macOS, and Linux
 - **Dual Interface**: Both command-line and graphical user interface
+- **Visual Review Interface**: See actual duplicate images with thumbnails
+- **Individual Image Control**: Select which specific images to keep/delete
+- **Side-by-Side Comparison**: Compare duplicate images in a popup window
+- **Streamlined Workflow**: Skip confirmation dialogs for fast visual review
 - **Perceptual Hashing**: Finds similar images, not just identical files
 - **Smart Detection**: Identifies exact duplicates and visually similar images
-- **Safe Operation**: Dry-run mode by default to preview changes
+- **Granular Safety Controls**: Separate dry-run settings for bulk vs individual operations
 - **Space Analysis**: Shows how much disk space can be saved
 - **Multiple Formats**: Supports JPG, PNG, BMP, GIF, TIFF, WebP
 
@@ -48,14 +52,29 @@ python image_deduplicator.py
 ```
 
 **GUI Features:**
+
+**Main Interface:**
 - Browse and select image directories
 - Adjustable similarity threshold
-- Dry-run mode toggle
+- Bulk dry-run mode toggle
 - Real-time progress indication with percentage
 - Responsive interface (non-blocking processing)
 - Cancel scan functionality
-- Detailed results display
-- Safe deletion with confirmation
+
+**Tabbed Results Interface:**
+- **Text Results Tab**: Traditional text-based duplicate information
+- **Visual Review Tab**: Interactive image review with thumbnails
+
+**Visual Review Features:**
+- **Image Thumbnails**: See actual duplicate images (200x200px)
+- **Group Selector**: Choose which duplicate group to review
+- **Individual Selection**: Checkboxes to choose which images to keep
+- **File Information**: Display file name, size, dimensions, and format
+- **Side-by-Side Comparison**: Popup window for detailed image comparison
+- **Individual Delete Buttons**: Delete specific images directly from visual interface
+- **Streamlined Workflow**: Skip confirmation dialogs for fast visual review
+- **Visual Safety Controls**: Separate dry-run settings for visual deletions
+- **Smart Interface Updates**: Automatic refresh after deletions
 
 ### Command-Line Mode
 
@@ -193,7 +212,24 @@ python image_deduplicator.py --threshold 2 ~/Pictures
 
 This will find more similar images, including those with slight variations.
 
-### Example 3: Save Results and Delete
+### Example 3: Visual Review Workflow
+
+```bash
+# Launch the GUI with visual interface
+python image_deduplicator.py --gui
+
+# 1. Select your image directory
+# 2. Adjust similarity threshold if needed
+# 3. Click "Scan for Duplicates"
+# 4. Switch to "Visual Review" tab
+# 5. Select duplicate groups from dropdown
+# 6. Review image thumbnails and file information
+# 7. Use "Compare with others" for side-by-side comparison
+# 8. Click "Delete This Image" for individual deletions
+# 9. Or use checkboxes + "Delete Selected" for bulk operations
+```
+
+### Example 4: Save Results and Delete
 
 ```bash
 # First, save results for review
@@ -261,6 +297,17 @@ Contributions welcome! Areas for improvement:
 - Advanced filtering options
 
 ## Changelog
+
+### Version 2.0.0 - Visual Interface Update
+- **NEW**: Visual Review tab with image thumbnails
+- **NEW**: Individual image selection and deletion
+- **NEW**: Side-by-side image comparison popup
+- **NEW**: Streamlined workflow with optional confirmation skipping
+- **NEW**: Granular safety controls (separate dry-run for bulk vs visual)
+- **NEW**: Real-time interface updates after deletions
+- **NEW**: Enhanced file information display
+- **IMPROVED**: Tabbed interface for better organization
+- **IMPROVED**: Smart group management after deletions
 
 ### Version 1.0.0
 - Initial release
