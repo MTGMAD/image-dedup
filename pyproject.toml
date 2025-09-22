@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "image-deduplicator"
+version = "2.0.0"
+description = "Cross-platform Python application to find and manage duplicate images with visual interface"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [
+    {name = "MTGMAD", email = "linux73@protonmail.com"}
+]
+maintainers = [
+    {name = "MTGMAD", email = "linux73@protonmail.com"}
+]
+keywords = ["image", "duplicate", "deduplication", "perceptual-hashing", "gui"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: System :: Filesystems",
+]
+dependencies = [
+    "Pillow>=9.0.0",
+    "imagehash>=4.3.1",
+    "psutil>=5.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/MTGMAD/image-dedup"
+Repository = "https://github.com/MTGMAD/image-dedup"
+Issues = "https://github.com/MTGMAD/image-dedup/issues"
+
+[project.scripts]
+image-deduplicator = "image_deduplicator:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["image_deduplicator*"]
