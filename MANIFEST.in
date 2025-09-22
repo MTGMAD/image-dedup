@@ -1,7 +1,0 @@
-include README.md
-include requirements.txt
-include LICENSE
-include run_gui.bat
-include run_gui.sh
-include stop_deduplicator.py
-recursive-include image_deduplicator *.py

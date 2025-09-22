@@ -46,8 +46,9 @@ Thumbs.db
 test_images/
 temp/
 
-# Large executables (use GitHub releases instead)
-release_packages/*.exe
-dist/*.exe
+# Build artifacts
+dist/
 build/
 *.spec
+__pycache__/
+*.pyc
