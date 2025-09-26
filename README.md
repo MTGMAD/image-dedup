@@ -22,6 +22,8 @@ A cross-platform Python application to find and manage duplicate images using pe
 
 - Python 3.7 or higher
 - pip (Python package installer)
+- ttkbootstrap (for modern themed GUI)
+- psutil (for system resource monitoring)
 
 ### Install Dependencies
 
@@ -32,7 +34,7 @@ pip install -r requirements.txt
 Or install manually:
 
 ```bash
-pip install Pillow imagehash
+pip install Pillow imagehash ttkbootstrap psutil
 ```
 
 ## Usage
@@ -66,7 +68,7 @@ python image_deduplicator.py
 - **Visual Review Tab**: Interactive image review with thumbnails
 
 **Visual Review Features:**
-- **Image Thumbnails**: See actual duplicate images (200x200px)
+- **Image Thumbnails**: See actual duplicate images (default 150x150px, responsive)
 - **Group Selector**: Choose which duplicate group to review
 - **Individual Selection**: Checkboxes to choose which images to keep
 - **File Information**: Display file name, size, dimensions, and format
@@ -258,6 +260,7 @@ pip install Pillow imagehash
 
 **GUI doesn't start**
 - Install tkinter: `sudo apt-get install python3-tk` (Linux)
+- Make sure ttkbootstrap is installed: `pip install ttkbootstrap`
 - Or use command-line mode
 
 ### Performance Tips

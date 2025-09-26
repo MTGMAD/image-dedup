@@ -357,7 +357,9 @@ class ImageDeduplicatorGUI:
             'danger': '#e06c75',      # danger (delete) color
             'disabled': '#3a5158',
             # border color used instead of bright/white borders
-            'border': '#1f2a2d'
+            'border': '#1f2a2d',
+            # Light grey for image background areas
+            'light_panel': '#e6e9ed'
         }
 
         # Apply styles for ttk widgets (works with ttkbootstrap or default ttk)
@@ -385,8 +387,25 @@ class ImageDeduplicatorGUI:
             # Entries and Comboboxes
             self.style.configure('TEntry', fieldbackground=self.palette['panel'], foreground=self.palette['text'])
             try:
-                # Combobox uses these options on many themes
-                self.style.configure('TCombobox', fieldbackground=self.palette['panel'], background=self.palette['panel'], foreground=self.palette['text'])
+                # Combobox styling (both the box and dropdown)
+                self.style.configure('TCombobox', 
+                    fieldbackground=self.palette['panel'],
+                    background=self.palette['panel'],
+                    foreground=self.palette['text'],
+                    selectbackground=self.palette['accent'],
+                    selectforeground=self.palette['text']
+                )
+                # Force dark colors in dropdown
+                self.style.map('TCombobox',
+                    fieldbackground=[('readonly', self.palette['panel'])],
+                    selectbackground=[('readonly', self.palette['accent'])],
+                    foreground=[('readonly', self.palette['text'])]
+                )
+                # Try to style the dropdown list specifically
+                self.root.option_add('*TCombobox*Listbox.background', self.palette['panel'])
+                self.root.option_add('*TCombobox*Listbox.foreground', self.palette['text'])
+                self.root.option_add('*TCombobox*Listbox.selectBackground', self.palette['accent'])
+                self.root.option_add('*TCombobox*Listbox.selectForeground', self.palette['text'])
             except Exception:
                 pass
 
@@ -559,9 +578,19 @@ class ImageDeduplicatorGUI:
         left_controls.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         ttk.Label(left_controls, text="Select duplicate groups to review:").pack(side=tk.LEFT, padx=(0, 10))
-    # Custom style for combobox: dark background, white text
-        self.style.configure('review.TCombobox', fieldbackground=self.palette['panel'], background=self.palette['panel'], foreground=self.palette['text'])
-        self.group_selector = ttk.Combobox(left_controls, state="readonly", width=20, style='review.TCombobox')
+        # Group selector with dark style
+        self.group_selector = ttk.Combobox(left_controls, state="readonly", width=20)
+        # Force the combobox to use our dark theme
+        self.group_selector.configure(style='TCombobox')
+        try:
+            # Explicitly set colors on the widget itself as backup
+            self.group_selector.configure(
+                foreground=self.palette['text'],
+                selectforeground=self.palette['text'],
+                selectbackground=self.palette['accent']
+            )
+        except Exception:
+            pass
         self.group_selector.pack(side=tk.LEFT, padx=(0, 10))
         self.group_selector.bind("<<ComboboxSelected>>", self.on_group_selected)
         
@@ -894,10 +923,10 @@ class ImageDeduplicatorGUI:
         
         group = self.deduplicator.duplicates[group_index]
 
-        # Create scrollable frame for images (panel bg everywhere, scale with window)
-        canvas = tk.Canvas(self.visual_review_frame, bg=self.palette['panel'], highlightthickness=0, bd=0)
+        # Create scrollable frame for images with light grey background
+        canvas = tk.Canvas(self.visual_review_frame, bg='#e6e9ed', highlightthickness=0, bd=0)
         scrollbar = ttk.Scrollbar(self.visual_review_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=self.palette['panel'])
+        scrollable_frame = tk.Frame(canvas, bg='#e6e9ed')
 
         # Responsive scaling
         canvas.grid(row=0, column=0, sticky="nsew")
@@ -912,94 +941,171 @@ class ImageDeduplicatorGUI:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Group info
-        info_frame = ttk.LabelFrame(scrollable_frame, text=f"Group {group_index + 1} - {group['type']} duplicates")
-        info_frame.pack(fill=tk.X, padx=6, pady=4)
-        try:
-            info_frame.configure(background=self.palette['panel'])
-        except Exception:
-            pass
-        ttk.Label(info_frame, text=f"Files: {len(group['files'])} | Space saved: {self.deduplicator._format_size(group['space_saved'])}").pack()
+        # Configure the group header style first
+        self.style.configure('GroupHeader.TLabelframe',
+                           background='#e6e9ed')  # Light grey
+        self.style.configure('GroupHeader.TLabelframe.Label',
+                           background='#e6e9ed',  # Light grey
+                           foreground='#2c3e50',  # Dark blue-grey
+                           font=('TkDefaultFont', 10, 'bold'))
 
-        # Image display frame (panel bg, scales with window)
-        images_frame = tk.Frame(scrollable_frame, bg=self.palette['panel'])
-        images_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
-        images_frame.columnconfigure(0, weight=1)
+        # Group info with light grey background and dark text
+        info_frame = ttk.LabelFrame(scrollable_frame, 
+                                  text=f"Group {group_index + 1} - {group['type']} duplicates",
+                                  style='GroupHeader.TLabelframe')
+        info_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=4)
+        
+        # Configure weight for the info frame column
+        scrollable_frame.columnconfigure(0, weight=1)
+        
+        # Style the frame and its label for light background
+        self.style.configure('GroupHeader.TLabelframe', background='#e6e9ed')
+        self.style.configure('GroupHeader.TLabelframe.Label',
+                           background='#e6e9ed',
+                           foreground='#2c3e50',
+                           font=('TkDefaultFont', 10, 'bold'))
+
+        # Info text with explicit styling
+        info_label = ttk.Label(info_frame, 
+                            text=f"Files: {len(group['files'])} | Space saved: {self.deduplicator._format_size(group['space_saved'])}",
+                            style='GroupHeader.TLabel')
+        info_label.grid(row=0, column=0, pady=4, sticky="ew")
+        info_frame.columnconfigure(0, weight=1)
+
+        # Image display frame with light grey background
+        images_frame = tk.Frame(scrollable_frame, bg='#e6e9ed')
+        images_frame.grid(row=1, column=0, sticky="nsew", padx=6, pady=4)
+        scrollable_frame.rowconfigure(1, weight=1)
+        scrollable_frame.columnconfigure(0, weight=1)
+
+        # Grid for responsive image layout
+        num_columns = 3  # Number of images per row
+        current_row = 0
+        current_col = 0
 
         # Create image selection variables
         self.image_vars = {}
         self.image_thumbnails = {}
+        self.image_labels = {}
 
         # Display each image in the group
         for i, file_info in enumerate(group['files']):
-            self.create_image_widget(images_frame, file_info, i, group_index)
+            current_row = i // num_columns
+            current_col = i % num_columns
+            images_frame.columnconfigure(current_col, weight=1)
+            # Create and grid the image widget
+            self.create_image_widget(images_frame, file_info, i, group_index, row=current_row, col=current_col)
+
+        # Configure row weights for vertical scaling
+        for row in range(current_row + 1):
+            images_frame.rowconfigure(row, weight=1)
     
-    def create_image_widget(self, parent, file_info, index, group_index):
+    def create_image_widget(self, parent, file_info, index, group_index, row=0, col=0):
         """Create a widget for displaying and selecting an image."""
-        # Create frame for this image
-        img_frame = ttk.LabelFrame(parent, text=f"Image {index + 1}")
-        img_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
-        
+        # Create frame for this image with light background
+        img_frame = ttk.LabelFrame(parent, text=f"Image {index + 1}", style='Card.TLabelframe')
+        img_frame.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
+        parent.rowconfigure(row, weight=1)
+        parent.columnconfigure(col, weight=1)
+
         # Image selection variable
         var_name = f"group_{group_index}_img_{index}"
         self.image_vars[var_name] = tk.BooleanVar()
-        
+
         # Checkbox for selection
-        checkbox = ttk.Checkbutton(img_frame, text="Keep this image", 
-                                  variable=self.image_vars[var_name])
-        checkbox.pack(pady=5)
+        # Create inner frame for content
+        content_frame = ttk.Frame(img_frame)
+        content_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        img_frame.columnconfigure(0, weight=1)
+        img_frame.rowconfigure(0, weight=1)
         
+        checkbox = ttk.Checkbutton(content_frame, text="Keep this image",
+                                 style='ImageCard.TCheckbutton',
+                                 variable=self.image_vars[var_name])
+        checkbox.grid(row=0, column=0, pady=(5,2), sticky="w")
+        content_frame.columnconfigure(0, weight=1)
+
         # Set default selection (keep largest file)
-        if index == 0:  # First file is the largest (recommended to keep)
+        if index == 0:
             self.image_vars[var_name].set(True)
+
+        # Image frame for thumbnail
+        image_frame = ttk.Frame(content_frame)
+        image_frame.grid(row=1, column=0, sticky="nsew")
+        content_frame.rowconfigure(1, weight=1)
+        def update_thumbnail(event=None):
+            try:
+                with Image.open(file_info['path']) as img:
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    # Force a smaller initial size for thumbnails
+                    target_size = (150, 150)  # Smaller fixed size for thumbnails
+                    if event:  # Only use frame size for resize events
+                        width = img_frame.winfo_width()
+                        height = img_frame.winfo_height()
+                        if width > 50 and height > 50:  # Valid resize
+                            target_size = (width-20, height-40)
+                    # Create thumbnail at target size
+                    img.thumbnail(target_size, Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(img)
+                    self.image_thumbnails[var_name] = photo
+                    if var_name in self.image_labels:
+                        self.image_labels[var_name].configure(image=photo, text="")
+                        self.image_labels[var_name].image = photo
+                    else:
+                        img_label = ttk.Label(image_frame, image=photo, style='ImageCard.TLabel')
+                        img_label.grid(row=0, column=0, pady=5, sticky="nsew")
+                        img_label.image = photo
+                        image_frame.columnconfigure(0, weight=1)
+                        image_frame.rowconfigure(0, weight=1)
+                        self.image_labels[var_name] = img_label
+            except Exception as e:
+                if var_name in self.image_labels:
+                    self.image_labels[var_name].configure(text=f"Error loading image:\n{str(e)[:50]}...", image="")
+                else:
+                    img_label = ttk.Label(image_frame, text=f"Error loading image:\n{str(e)[:50]}...", style='ImageCard.TLabel')
+                    img_label.grid(row=0, column=0, pady=5, sticky="nsew")
+                    image_frame.columnconfigure(0, weight=1)
+                    image_frame.rowconfigure(0, weight=1)
+                    self.image_labels[var_name] = img_label
+
+        img_frame.bind('<Configure>', update_thumbnail)
+        update_thumbnail()
         
-        # Image thumbnail
-        try:
-            # Load and resize image for thumbnail
-            with Image.open(file_info['path']) as img:
-                # Convert to RGB if necessary
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                
-                # Resize to thumbnail size
-                img.thumbnail((200, 200), Image.Resampling.LANCZOS)
-                
-                # Convert to PhotoImage
-                photo = ImageTk.PhotoImage(img)
-                self.image_thumbnails[var_name] = photo  # Keep reference
-                
-                # Display image
-                img_label = ttk.Label(img_frame, image=photo)
-                img_label.pack(pady=5)
-                
-        except Exception as e:
-            # If image can't be loaded, show error
-            error_label = ttk.Label(img_frame, text=f"Error loading image:\n{str(e)[:50]}...")
-            error_label.pack(pady=5)
-        
-        # File info
+        # File info (simplified for better layout)
         info_text = f"File: {Path(file_info['path']).name}\n"
-        info_text += f"Size: {self.deduplicator._format_size(file_info['size'])}\n"
-        info_text += f"Dimensions: {file_info['width']}x{file_info['height']}\n"
-        info_text += f"Format: {file_info['format']}"
+        info_text += f"Size: {self.deduplicator._format_size(file_info['size'])}"
         
-        info_label = ttk.Label(img_frame, text=info_text, justify=tk.LEFT)
-        info_label.pack(pady=5)
+        info_label = ttk.Label(content_frame, text=info_text, 
+                              justify=tk.LEFT, style='ImageCard.TLabel')
+        info_label.grid(row=2, column=0, pady=(2,5), sticky="w")
         
-        # Add action buttons
-        button_frame = ttk.Frame(img_frame)
-        button_frame.pack(pady=5)
+        # Add action buttons in a grid layout
+        button_frame = ttk.Frame(content_frame)
+        button_frame.grid(row=3, column=0, pady=(0,5), sticky="ew")
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
         
         # Comparison button
         compare_btn = ttk.Button(button_frame, text="Compare", 
-                               command=lambda: self.show_comparison(group_index, index))
-        compare_btn.pack(side=tk.LEFT, padx=(0, 5))
+                               command=lambda: self.show_comparison(group_index, index),
+                               style='primary.TButton')
+        compare_btn.grid(row=0, column=0, padx=5, sticky="ew")
         
         # Individual delete button
         delete_btn = ttk.Button(button_frame, text="Delete This Image", 
                               command=lambda: self.delete_single_image(file_info['path'], group_index, index),
-                              style="Accent.TButton")
-        delete_btn.pack(side=tk.LEFT)
+                              style="danger.TButton")
+        delete_btn.grid(row=0, column=1, padx=5, sticky="ew")
+        
+        # Style for better visibility on light background
+        try:
+            self.style.configure('ImageCard.TLabel', background=self.palette['light_panel'], foreground='black')
+            self.style.configure('ImageCard.TCheckbutton', background=self.palette['light_panel'], foreground='black')
+            self.style.configure('Card.TLabelframe', background=self.palette['light_panel'])
+            self.style.configure('Card.TLabelframe.Label', background=self.palette['light_panel'], foreground='black')
+        except Exception:
+            pass
     
     def delete_selected(self):
         """Delete selected duplicate files."""
