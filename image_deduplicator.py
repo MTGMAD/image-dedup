@@ -34,8 +34,16 @@ try:
     import threading
     import queue
     from PIL import ImageTk
+    # Optional modern theming via ttkbootstrap
+    try:
+        import ttkbootstrap as tb
+        from ttkbootstrap import Style
+        TB_AVAILABLE = True
+    except Exception:
+        TB_AVAILABLE = False
 except ImportError:
     GUI_AVAILABLE = False
+    TB_AVAILABLE = False
 
 
 class ImageDeduplicator:
@@ -326,10 +334,95 @@ class ImageDeduplicatorGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Image Deduplicator")
+        # Make geometry adaptive; start size only
         self.root.geometry("1000x700")
-        
-        # Configure style
-        self.root.configure(bg='#f0f0f0')
+
+        # Apply modern ttkbootstrap style when available
+        if 'TB_AVAILABLE' in globals() and TB_AVAILABLE:
+            try:
+                self.style = Style(theme='flatly')
+            except Exception:
+                # fallback
+                self.style = ttk.Style()
+        else:
+            self.style = ttk.Style()
+
+        # Color palette (inspired by the provided screenshot)
+        self.palette = {
+            'bg': '#22343a',          # main window background (dark teal)
+            'panel': '#2f4850',       # panel / frame background (darker)
+            'accent': '#3fa9ff',      # primary button / accent (bright blue)
+            'muted': '#7ea6b3',       # muted text / secondary
+            'text': '#ffffff',        # primary text
+            'danger': '#e06c75',      # danger (delete) color
+            'disabled': '#3a5158',
+            # border color used instead of bright/white borders
+            'border': '#1f2a2d'
+        }
+
+        # Apply styles for ttk widgets (works with ttkbootstrap or default ttk)
+        try:
+            # Frame and Label backgrounds
+            self.style.configure('TFrame', background=self.palette['panel'])
+            self.style.configure('TLabel', background=self.palette['panel'], foreground=self.palette['text'])
+            self.style.configure('TLabelframe', background=self.palette['panel'], foreground=self.palette['text'])
+            self.style.configure('TLabelframe.Label', background=self.palette['panel'], foreground=self.palette['text'])
+
+            # Text widget / ScrolledText isn't a themed widget; set root bg for area
+            self.style.configure('TCheckbutton', background=self.palette['panel'], foreground=self.palette['text'])
+
+            # Primary / Scan button style
+            self.style.configure('primary.TButton', background=self.palette['accent'], foreground=self.palette['text'], borderwidth=0)
+            self.style.map('primary.TButton', background=[('active', self.palette['accent']), ('disabled', self.palette['disabled'])])
+
+            # Danger / Delete button style
+            self.style.configure('danger.TButton', background=self.palette['danger'], foreground=self.palette['text'], borderwidth=0)
+            self.style.map('danger.TButton', background=[('active', self.palette['danger']), ('disabled', self.palette['disabled'])])
+
+            # Default TButton fallback visual
+            self.style.configure('TButton', background=self.palette['panel'], foreground=self.palette['text'])
+
+            # Entries and Comboboxes
+            self.style.configure('TEntry', fieldbackground=self.palette['panel'], foreground=self.palette['text'])
+            try:
+                # Combobox uses these options on many themes
+                self.style.configure('TCombobox', fieldbackground=self.palette['panel'], background=self.palette['panel'], foreground=self.palette['text'])
+            except Exception:
+                pass
+
+            # Notebook / Tabs
+            try:
+                self.style.configure('TNotebook', background=self.palette['panel'], borderwidth=0)
+                self.style.configure('TNotebook.Tab', background=self.palette['panel'], foreground=self.palette['text'])
+                self.style.map('TNotebook.Tab', background=[('selected', self.palette['panel'])], foreground=[('selected', self.palette['text'])])
+            except Exception:
+                pass
+
+            # Progressbar
+            try:
+                self.style.configure('TProgressbar', troughcolor=self.palette['panel'], background=self.palette['accent'])
+            except Exception:
+                pass
+            # Apply a subtle darker border for framed widgets
+            try:
+                self.style.configure('TFrame.border', background=self.palette['border'])
+            except Exception:
+                pass
+            # Cancel button running style (light red with white text)
+            try:
+                self.style.configure('cancel_running.TButton', background='#ff6b6b', foreground=self.palette['text'], borderwidth=0)
+                self.style.map('cancel_running.TButton', background=[('active', '#ff5252'), ('disabled', self.palette['disabled'])])
+            except Exception:
+                pass
+        except Exception:
+            # If style configuration fails, continue with default styles
+            pass
+
+        # Configure background for non-ttk elements
+        try:
+            self.root.configure(bg=self.palette['bg'])
+        except Exception:
+            self.root.configure(bg='#f0f0f0')
         
         # Variables
         self.directory_var = tk.StringVar()
@@ -374,44 +467,66 @@ class ImageDeduplicatorGUI:
             row=0, column=1, sticky=(tk.W, tk.E), padx=(5, 5), pady=5)
         ttk.Button(control_frame, text="Browse", command=self.browse_directory).grid(
             row=0, column=2, pady=5)
-        
-        # Options frame
-        options_frame = ttk.LabelFrame(control_frame, text="Options", padding="10")
-        options_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+
+        # Options frame (wrap in a dark border frame to avoid bright outlines)
+        options_outer = tk.Frame(control_frame, bg=self.palette.get('border'))
+        options_outer.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        options_frame = ttk.LabelFrame(options_outer, text="Options", padding="10")
+        options_frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         options_frame.columnconfigure(1, weight=1)
-        
+
         # Threshold setting
         ttk.Label(options_frame, text="Similarity Threshold:").grid(row=0, column=0, sticky=tk.W, pady=2)
         threshold_frame = ttk.Frame(options_frame)
         threshold_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2)
-        
+
         ttk.Scale(threshold_frame, from_=0, to=20, variable=self.threshold_var, 
                  orient=tk.HORIZONTAL, length=200).pack(side=tk.LEFT)
         ttk.Label(threshold_frame, textvariable=self.threshold_var).pack(side=tk.LEFT, padx=(10, 0))
-        
+
         # Dry run checkbox
         ttk.Checkbutton(options_frame, text="Dry Run (bulk delete only)", 
                        variable=self.dry_run_var).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
-        
-        # Buttons frame
+
+        # Buttons frame (stacked full-width main actions to match screenshot)
         buttons_frame = ttk.Frame(control_frame)
         buttons_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
-        
-        self.scan_button = ttk.Button(buttons_frame, text="Scan for Duplicates", 
-                                     command=self.scan_duplicates)
-        self.scan_button.pack(side=tk.LEFT, padx=(0, 10))
-        
-        self.delete_button = ttk.Button(buttons_frame, text="Delete Selected", 
-                                       command=self.delete_selected, state='disabled')
-        self.delete_button.pack(side=tk.LEFT, padx=(0, 10))
-        
-        self.cancel_button = ttk.Button(buttons_frame, text="Cancel Scan", 
-                                       command=self.cancel_scan, state='disabled')
+
+        # Tune primary and danger styles for bigger full-width buttons
+        try:
+            self.style.configure('primary.TButton', padding=(10, 8), font=('Helvetica', 11, 'bold'))
+            self.style.configure('danger.TButton', padding=(10, 8), font=('Helvetica', 11, 'bold'))
+        except Exception:
+            pass
+
+        # Large Scan button (full width)
+        scan_style = 'primary.TButton' if ('TB_AVAILABLE' in globals() and TB_AVAILABLE) else 'primary.TButton'
+        self.scan_button = ttk.Button(buttons_frame, text="Scan for Duplicates", command=self.scan_duplicates, style=scan_style)
+        self.scan_button.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(0, 6))
+
+        # Disabled Download/Delete button (full width)
+        delete_style = 'danger.TButton' if ('TB_AVAILABLE' in globals() and TB_AVAILABLE) else 'TButton'
+        self.delete_button = ttk.Button(buttons_frame, text="Delete Selected", command=self.delete_selected, state='disabled', style=delete_style)
+        self.delete_button.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(0, 6))
+
+        # Small action row for cancel (aligned left)
+        small_actions = ttk.Frame(buttons_frame)
+        small_actions.pack(side=tk.TOP, fill=tk.X)
+        # Default style should match the Delete Selected resting style
+        self.cancel_default_style = delete_style
+        self.cancel_button = ttk.Button(small_actions, text="Cancel Scan", command=self.cancel_scan, state='disabled', style=self.cancel_default_style)
         self.cancel_button.pack(side=tk.LEFT)
         
-        # Create notebook for tabs
-        self.notebook = ttk.Notebook(main_frame)
-        self.notebook.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        # Create notebook for tabs (wrap tabs area to remove white tab border)
+        try:
+            self.style.configure('TNotebook', background=self.palette['panel'], borderwidth=0)
+            self.style.configure('TNotebook.Tab', background=self.palette['panel'], foreground=self.palette['text'])
+        except Exception:
+            pass
+        notebook_outer = tk.Frame(main_frame, bg=self.palette.get('border'))
+        notebook_outer.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        self.notebook = ttk.Notebook(notebook_outer)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         
         # Text Results Tab
         self.text_frame = ttk.Frame(self.notebook)
@@ -419,9 +534,15 @@ class ImageDeduplicatorGUI:
         self.text_frame.columnconfigure(0, weight=1)
         self.text_frame.rowconfigure(0, weight=1)
         
-        # Results text area
-        self.results_text = scrolledtext.ScrolledText(self.text_frame, height=15, width=80)
-        self.results_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Results text area (wrap in dark border to avoid white border from the scrolledtext)
+        text_outer = tk.Frame(self.text_frame, bg=self.palette.get('border'))
+        text_outer.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=0, pady=0)
+        self.results_text = scrolledtext.ScrolledText(text_outer, height=15, width=80, bd=0, relief=tk.FLAT, highlightthickness=0)
+        self.results_text.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+        try:
+            self.results_text.configure(background=self.palette['panel'], foreground=self.palette['text'], insertbackground=self.palette['text'])
+        except Exception:
+            pass
         
         # Visual Review Tab
         self.visual_frame = ttk.Frame(self.notebook)
@@ -474,21 +595,22 @@ class ImageDeduplicatorGUI:
         
         # Initialize the label
         self.update_visual_mode_label()
-        
+
         # Visual review area
         self.visual_review_frame = ttk.Frame(self.visual_frame)
         self.visual_review_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.visual_review_frame.columnconfigure(0, weight=1)
         self.visual_review_frame.rowconfigure(0, weight=1)
-        
+
         # Progress bar
         self.progress = ttk.Progressbar(main_frame, mode='determinate', maximum=100)
         self.progress.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)
-        
+
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
-        status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
+        status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.FLAT)
         status_bar.grid(row=4, column=0, sticky=(tk.W, tk.E), pady=5)
+        status_bar.configure(background=self.palette['panel'], foreground=self.palette['muted'])
     
     def setup_threading(self):
         """Setup threading for responsive GUI."""
@@ -520,7 +642,10 @@ class ImageDeduplicatorGUI:
             self.progress['value'] = 100
             self.status_var.set("Scan complete")
             self.scan_button.config(state='normal', text="Scan for Duplicates")
-            self.cancel_button.config(state='disabled')
+            try:
+                self.cancel_button.config(state='disabled', style=getattr(self, 'cancel_default_style', 'TButton'))
+            except Exception:
+                self.cancel_button.config(state='disabled')
             if self.deduplicator and self.deduplicator.duplicates:
                 self.delete_button.config(state='normal')
             self.display_results()
@@ -530,7 +655,10 @@ class ImageDeduplicatorGUI:
             self.progress['value'] = 0
             self.status_var.set("Scan failed")
             self.scan_button.config(state='normal', text="Scan for Duplicates")
-            self.cancel_button.config(state='disabled')
+            try:
+                self.cancel_button.config(state='disabled', style=getattr(self, 'cancel_default_style', 'TButton'))
+            except Exception:
+                self.cancel_button.config(state='disabled')
             messagebox.showerror("Error", message['error'])
         
         elif msg_type == 'cancelled':
@@ -538,13 +666,25 @@ class ImageDeduplicatorGUI:
             self.progress['value'] = 0
             self.status_var.set("Scan cancelled")
             self.scan_button.config(state='normal', text="Scan for Duplicates")
-            self.cancel_button.config(state='disabled')
+            try:
+                self.cancel_button.config(state='disabled', style=getattr(self, 'cancel_default_style', 'TButton'))
+            except Exception:
+                self.cancel_button.config(state='disabled')
     
     def cancel_scan(self):
         """Cancel the current scan."""
         if self.is_scanning:
+            # Signal the worker to stop by clearing the flag. The worker will
+            # detect this and finish; do NOT enqueue a 'cancelled' message
+            # here because that would cause the UI to revert immediately.
             self.is_scanning = False
-            self.message_queue.put({'type': 'cancelled'})
+            # Update the UI: show Cancelling and disable the cancel button
+            # but keep the running (red) style so it stays visually active
+            try:
+                self.cancel_button.config(state='disabled', style='cancel_running.TButton')
+            except Exception:
+                self.cancel_button.config(state='disabled')
+            self.status_var.set("Cancelling...")
     
     def browse_directory(self):
         """Open directory browser dialog."""
@@ -569,7 +709,11 @@ class ImageDeduplicatorGUI:
         # Update UI for scanning
         self.is_scanning = True
         self.scan_button.config(state='disabled', text="Scanning...")
-        self.cancel_button.config(state='normal')
+        # Enable and style the cancel button for running state
+        try:
+            self.cancel_button.config(state='normal', style='cancel_running.TButton')
+        except Exception:
+            self.cancel_button.config(state='normal')
         self.delete_button.config(state='disabled')
         self.progress.config(mode='determinate', value=0)
         self.status_var.set("Starting scan...")
@@ -749,7 +893,7 @@ class ImageDeduplicatorGUI:
         group = self.deduplicator.duplicates[group_index]
         
         # Create scrollable frame for images
-        canvas = tk.Canvas(self.visual_review_frame, bg='white')
+        canvas = tk.Canvas(self.visual_review_frame, bg=self.palette.get('panel'))
         scrollbar = ttk.Scrollbar(self.visual_review_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
@@ -963,7 +1107,7 @@ class ImageDeduplicatorGUI:
         title_label.pack(pady=(0, 10))
         
         # Create scrollable frame for images
-        canvas = tk.Canvas(main_frame, bg='white')
+        canvas = tk.Canvas(main_frame, bg=self.palette.get('panel'))
         scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=canvas.xview)
         scrollable_frame = ttk.Frame(canvas)
         
@@ -988,13 +1132,18 @@ class ImageDeduplicatorGUI:
     
     def create_comparison_widget(self, parent, file_info, index, group_index, selected_index):
         """Create a comparison widget for an image."""
-        # Create frame for this image
-        img_frame = ttk.LabelFrame(parent, text=f"Image {index + 1}")
-        img_frame.pack(side=tk.LEFT, padx=10, pady=5, fill=tk.BOTH, expand=True)
-        
-        # Highlight selected image
+        # Create frame for this image. Use a colored outer border (palette['border'])
+        # and an inner panel frame for the image to avoid bright/white borders.
+        outer = tk.Frame(parent, bg=self.palette.get('border', '#1f2a2d'))
+        outer.pack(side=tk.LEFT, padx=6, pady=4, fill=tk.BOTH, expand=True)
+
+        img_frame = ttk.LabelFrame(outer, text=f"Image {index + 1}")
+        img_frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+
+        # Highlight selected image by increasing the outer border thickness
         if index == selected_index:
-            img_frame.configure(relief="solid", borderwidth=3)
+            outer.config(bg=self.palette.get('border', '#1f2a2d'))
+            outer.pack_configure(padx=6, pady=4)
         
         # Image thumbnail (larger for comparison)
         try:
