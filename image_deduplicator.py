@@ -559,7 +559,9 @@ class ImageDeduplicatorGUI:
         left_controls.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         ttk.Label(left_controls, text="Select duplicate groups to review:").pack(side=tk.LEFT, padx=(0, 10))
-        self.group_selector = ttk.Combobox(left_controls, state="readonly", width=20)
+    # Custom style for combobox: dark background, white text
+        self.style.configure('review.TCombobox', fieldbackground=self.palette['panel'], background=self.palette['panel'], foreground=self.palette['text'])
+        self.group_selector = ttk.Combobox(left_controls, state="readonly", width=20, style='review.TCombobox')
         self.group_selector.pack(side=tk.LEFT, padx=(0, 10))
         self.group_selector.bind("<<ComboboxSelected>>", self.on_group_selected)
         
@@ -596,8 +598,8 @@ class ImageDeduplicatorGUI:
         # Initialize the label
         self.update_visual_mode_label()
 
-        # Visual review area
-        self.visual_review_frame = ttk.Frame(self.visual_frame)
+    # Visual review area (use panel bg, set grid weights for scaling)
+        self.visual_review_frame = tk.Frame(self.visual_frame, bg=self.palette['panel'])
         self.visual_review_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.visual_review_frame.columnconfigure(0, weight=1)
         self.visual_review_frame.rowconfigure(0, weight=1)
@@ -891,41 +893,46 @@ class ImageDeduplicatorGUI:
             widget.destroy()
         
         group = self.deduplicator.duplicates[group_index]
-        
-        # Create scrollable frame for images
-        canvas = tk.Canvas(self.visual_review_frame, bg=self.palette.get('panel'))
+
+        # Create scrollable frame for images (panel bg everywhere, scale with window)
+        canvas = tk.Canvas(self.visual_review_frame, bg=self.palette['panel'], highlightthickness=0, bd=0)
         scrollbar = ttk.Scrollbar(self.visual_review_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
+        scrollable_frame = tk.Frame(canvas, bg=self.palette['panel'])
+
+        # Responsive scaling
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.visual_review_frame.columnconfigure(0, weight=1)
+        self.visual_review_frame.rowconfigure(0, weight=1)
+
         scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-        
+
         # Group info
         info_frame = ttk.LabelFrame(scrollable_frame, text=f"Group {group_index + 1} - {group['type']} duplicates")
-        info_frame.pack(fill=tk.X, padx=10, pady=5)
-        
+        info_frame.pack(fill=tk.X, padx=6, pady=4)
+        try:
+            info_frame.configure(background=self.palette['panel'])
+        except Exception:
+            pass
         ttk.Label(info_frame, text=f"Files: {len(group['files'])} | Space saved: {self.deduplicator._format_size(group['space_saved'])}").pack()
-        
-        # Image display frame
-        images_frame = ttk.Frame(scrollable_frame)
-        images_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
+
+        # Image display frame (panel bg, scales with window)
+        images_frame = tk.Frame(scrollable_frame, bg=self.palette['panel'])
+        images_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
+        images_frame.columnconfigure(0, weight=1)
+
         # Create image selection variables
         self.image_vars = {}
         self.image_thumbnails = {}
-        
+
         # Display each image in the group
         for i, file_info in enumerate(group['files']):
             self.create_image_widget(images_frame, file_info, i, group_index)
-        
-        # Pack canvas and scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
     
     def create_image_widget(self, parent, file_info, index, group_index):
         """Create a widget for displaying and selecting an image."""
