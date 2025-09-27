@@ -340,7 +340,9 @@ class ImageDeduplicatorGUI:
         # Apply modern ttkbootstrap style when available
         if 'TB_AVAILABLE' in globals() and TB_AVAILABLE:
             try:
-                self.style = Style(theme='flatly')
+                # Prefer the user's requested ttkbootstrap theme
+                self.style = Style(theme='superhero')
+                self.tb = tb
             except Exception:
                 # fallback
                 self.style = ttk.Style()
@@ -348,18 +350,18 @@ class ImageDeduplicatorGUI:
             self.style = ttk.Style()
 
         # Color palette (inspired by the provided screenshot)
+        # Color palette tuned to the user's "superhero" preferences
         self.palette = {
-            'bg': '#22343a',          # main window background (dark teal)
-            'panel': '#2f4850',       # panel / frame background (darker)
-            'accent': '#3fa9ff',      # primary button / accent (bright blue)
-            'muted': '#7ea6b3',       # muted text / secondary
-            'text': '#ffffff',        # primary text
-            'danger': '#e06c75',      # danger (delete) color
-            'disabled': '#3a5158',
-            # border color used instead of bright/white borders
-            'border': '#1f2a2d',
-            # Light grey for image background areas
-            'light_panel': '#e6e9ed'
+            'bg': '#071022',          # dark navy / near-black background
+            'panel': '#0f2230',       # slightly lighter panel background
+            'accent': '#007bff',      # primary action (blue/purple typical)
+            'muted': '#9fb6c6',       # muted text / secondary
+            'text': '#e6eef6',        # light gray / off-white text
+            'danger': '#e06c75',      # danger (delete) color (kept)
+            'disabled': '#21313a',
+            'border': '#04121a',
+            # Medium/dark gray for image background areas
+            'light_panel': '#0f2230'
         }
 
         # Apply styles for ttk widgets (works with ttkbootstrap or default ttk)
@@ -373,16 +375,25 @@ class ImageDeduplicatorGUI:
             # Text widget / ScrolledText isn't a themed widget; set root bg for area
             self.style.configure('TCheckbutton', background=self.palette['panel'], foreground=self.palette['text'])
 
-            # Primary / Scan button style
-            self.style.configure('primary.TButton', background=self.palette['accent'], foreground=self.palette['text'], borderwidth=0)
-            self.style.map('primary.TButton', background=[('active', self.palette['accent']), ('disabled', self.palette['disabled'])])
+            # Primary / Scan button style (use ttkbootstrap semantic style if available)
+            try:
+                if 'tb' in globals() and TB_AVAILABLE:
+                    # ttkbootstrap uses 'primary', 'info', 'success' bootstyles
+                    self.scan_bootstyle = 'primary'
+                    self.info_bootstyle = 'info'
+                    self.success_bootstyle = 'success'
+                else:
+                    self.style.configure('primary.TButton', background=self.palette['accent'], foreground=self.palette['text'], borderwidth=0)
+                    self.style.map('primary.TButton', background=[('active', self.palette['accent']), ('disabled', self.palette['disabled'])])
 
-            # Danger / Delete button style
-            self.style.configure('danger.TButton', background=self.palette['danger'], foreground=self.palette['text'], borderwidth=0)
-            self.style.map('danger.TButton', background=[('active', self.palette['danger']), ('disabled', self.palette['disabled'])])
+                # Danger / Delete button style
+                self.style.configure('danger.TButton', background=self.palette['danger'], foreground=self.palette['text'], borderwidth=0)
+                self.style.map('danger.TButton', background=[('active', self.palette['danger']), ('disabled', self.palette['disabled'])])
 
-            # Default TButton fallback visual
-            self.style.configure('TButton', background=self.palette['panel'], foreground=self.palette['text'])
+                # Default TButton fallback visual
+                self.style.configure('TButton', background=self.palette['panel'], foreground=self.palette['text'])
+            except Exception:
+                pass
 
             # Entries and Comboboxes
             self.style.configure('TEntry', fieldbackground=self.palette['panel'], foreground=self.palette['text'])
@@ -437,16 +448,21 @@ class ImageDeduplicatorGUI:
             # If style configuration fails, continue with default styles
             pass
 
-        # Configure background for non-ttk elements
+        # Configure background for non-ttk elements and default fonts
         try:
             self.root.configure(bg=self.palette['bg'])
         except Exception:
-            self.root.configure(bg='#f0f0f0')
-        
+            self.root.configure(bg='#000000')
+
+        # Avoid setting global option_add fonts (can confuse Tcl with names containing spaces)
+
         # Variables
         self.directory_var = tk.StringVar()
         self.threshold_var = tk.IntVar(value=5)
         self.dry_run_var = tk.BooleanVar(value=True)
+        # Fixed thumbnail size (width, height)
+        # Increased slightly so images are more visible in visual review
+        self.thumb_size = (200, 200)
         self.deduplicator = None
         self.selected_groups = set()
         
@@ -472,7 +488,7 @@ class ImageDeduplicatorGUI:
         
         # Title
         title_label = ttk.Label(main_frame, text="Image Deduplicator", 
-                               font=Font(size=16, weight='bold'))
+                                font=('Segoe UI', 16, 'bold'))
         title_label.grid(row=0, column=0, pady=(0, 20))
         
         # Control panel
@@ -504,8 +520,11 @@ class ImageDeduplicatorGUI:
         ttk.Label(threshold_frame, textvariable=self.threshold_var).pack(side=tk.LEFT, padx=(10, 0))
 
         # Dry run checkbox
-        ttk.Checkbutton(options_frame, text="Dry Run (bulk delete only)", 
-                       variable=self.dry_run_var).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+        # Use tb.Checkbutton with info bootstyle if available for cyan accents
+        if 'tb' in globals() and TB_AVAILABLE:
+            tb.Checkbutton(options_frame, text="Dry Run (bulk delete only)", variable=self.dry_run_var, bootstyle='info').grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+        else:
+            ttk.Checkbutton(options_frame, text="Dry Run (bulk delete only)", variable=self.dry_run_var).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
 
         # Buttons frame (stacked full-width main actions to match screenshot)
         buttons_frame = ttk.Frame(control_frame)
@@ -518,14 +537,20 @@ class ImageDeduplicatorGUI:
         except Exception:
             pass
 
-        # Large Scan button (full width)
-        scan_style = 'primary.TButton' if ('TB_AVAILABLE' in globals() and TB_AVAILABLE) else 'primary.TButton'
-        self.scan_button = ttk.Button(buttons_frame, text="Scan for Duplicates", command=self.scan_duplicates, style=scan_style)
+        # Large Scan button (full width) - use ttkbootstrap bootstyle if available
+        if 'tb' in globals() and TB_AVAILABLE:
+            self.scan_button = tb.Button(buttons_frame, text="Scan for Duplicates", command=self.scan_duplicates, bootstyle='primary', width=0)
+        else:
+            scan_style = 'primary.TButton'
+            self.scan_button = ttk.Button(buttons_frame, text="Scan for Duplicates", command=self.scan_duplicates, style=scan_style)
         self.scan_button.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(0, 6))
 
         # Disabled Download/Delete button (full width)
-        delete_style = 'danger.TButton' if ('TB_AVAILABLE' in globals() and TB_AVAILABLE) else 'TButton'
-        self.delete_button = ttk.Button(buttons_frame, text="Delete Selected", command=self.delete_selected, state='disabled', style=delete_style)
+        delete_style = 'danger.TButton'
+        if 'tb' in globals() and TB_AVAILABLE:
+            self.delete_button = tb.Button(buttons_frame, text="Delete Selected", command=self.delete_selected, bootstyle='danger', state='disabled')
+        else:
+            self.delete_button = ttk.Button(buttons_frame, text="Delete Selected", command=self.delete_selected, state='disabled', style=delete_style)
         self.delete_button.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(0, 6))
 
         # Small action row for cancel (aligned left)
@@ -533,7 +558,10 @@ class ImageDeduplicatorGUI:
         small_actions.pack(side=tk.TOP, fill=tk.X)
         # Default style should match the Delete Selected resting style
         self.cancel_default_style = delete_style
-        self.cancel_button = ttk.Button(small_actions, text="Cancel Scan", command=self.cancel_scan, state='disabled', style=self.cancel_default_style)
+        if 'tb' in globals() and TB_AVAILABLE:
+            self.cancel_button = tb.Button(small_actions, text="Cancel Scan", command=self.cancel_scan, state='disabled', bootstyle='danger')
+        else:
+            self.cancel_button = ttk.Button(small_actions, text="Cancel Scan", command=self.cancel_scan, state='disabled', style=self.cancel_default_style)
         self.cancel_button.pack(side=tk.LEFT)
         
         # Create notebook for tabs (wrap tabs area to remove white tab border)
@@ -618,7 +646,7 @@ class ImageDeduplicatorGUI:
         
         # Visual deletion mode label
         self.visual_mode_label = ttk.Label(right_controls, text="Visual Delete: ENABLED", 
-                                          foreground="green", font=Font(weight='bold'))
+                                          foreground="green", font=('Segoe UI', 10, 'bold'))
         self.visual_mode_label.pack(side=tk.RIGHT, padx=(10, 0))
         
         # Bind to update the label when checkbox changes
@@ -633,13 +661,24 @@ class ImageDeduplicatorGUI:
         self.visual_review_frame.columnconfigure(0, weight=1)
         self.visual_review_frame.rowconfigure(0, weight=1)
 
-        # Progress bar
-        self.progress = ttk.Progressbar(main_frame, mode='determinate', maximum=100)
+        # Progress bar (use ttkbootstrap styled progress when available)
+        if 'tb' in globals() and TB_AVAILABLE:
+            try:
+                self.progress = tb.Progressbar(main_frame, bootstyle='info', mode='determinate', maximum=100)
+            except Exception:
+                self.progress = ttk.Progressbar(main_frame, mode='determinate', maximum=100)
+        else:
+            self.progress = ttk.Progressbar(main_frame, mode='determinate', maximum=100)
         self.progress.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)
 
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
-        status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.FLAT)
+        # Use Consolas for status text if available
+        try:
+            status_font = ('Consolas', 9)
+        except Exception:
+            status_font = None
+        status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.FLAT, font=status_font)
         status_bar.grid(row=4, column=0, sticky=(tk.W, tk.E), pady=5)
         status_bar.configure(background=self.palette['panel'], foreground=self.palette['muted'])
     
@@ -923,10 +962,10 @@ class ImageDeduplicatorGUI:
         
         group = self.deduplicator.duplicates[group_index]
 
-        # Create scrollable frame for images with light grey background
-        canvas = tk.Canvas(self.visual_review_frame, bg='#e6e9ed', highlightthickness=0, bd=0)
+        # Create scrollable frame for images with medium/dark gray background
+        canvas = tk.Canvas(self.visual_review_frame, bg=self.palette['light_panel'], highlightthickness=0, bd=0)
         scrollbar = ttk.Scrollbar(self.visual_review_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg='#e6e9ed')
+        scrollable_frame = tk.Frame(canvas, bg=self.palette['light_panel'])
 
         # Responsive scaling
         canvas.grid(row=0, column=0, sticky="nsew")
@@ -943,11 +982,11 @@ class ImageDeduplicatorGUI:
 
         # Configure the group header style first
         self.style.configure('GroupHeader.TLabelframe',
-                           background='#e6e9ed')  # Light grey
+               background=self.palette['light_panel'])  # Medium/dark gray
         self.style.configure('GroupHeader.TLabelframe.Label',
-                           background='#e6e9ed',  # Light grey
-                           foreground='#2c3e50',  # Dark blue-grey
-                           font=('TkDefaultFont', 10, 'bold'))
+               background=self.palette['light_panel'],  # Medium/dark gray
+               foreground='#e0e0e0',  # Light gray text
+               font=('TkDefaultFont', 10, 'bold'))
 
         # Group info with light grey background and dark text
         info_frame = ttk.LabelFrame(scrollable_frame, 
@@ -959,11 +998,11 @@ class ImageDeduplicatorGUI:
         scrollable_frame.columnconfigure(0, weight=1)
         
         # Style the frame and its label for light background
-        self.style.configure('GroupHeader.TLabelframe', background='#e6e9ed')
+        self.style.configure('GroupHeader.TLabelframe', background=self.palette['light_panel'])
         self.style.configure('GroupHeader.TLabelframe.Label',
-                           background='#e6e9ed',
-                           foreground='#2c3e50',
-                           font=('TkDefaultFont', 10, 'bold'))
+               background=self.palette['light_panel'],
+               foreground='#e0e0e0',
+               font=('TkDefaultFont', 10, 'bold'))
 
         # Info text with explicit styling
         info_label = ttk.Label(info_frame, 
@@ -972,8 +1011,8 @@ class ImageDeduplicatorGUI:
         info_label.grid(row=0, column=0, pady=4, sticky="ew")
         info_frame.columnconfigure(0, weight=1)
 
-        # Image display frame with light grey background
-        images_frame = tk.Frame(scrollable_frame, bg='#e6e9ed')
+        # Image display frame with medium/dark gray background
+        images_frame = tk.Frame(scrollable_frame, bg=self.palette['light_panel'])
         images_frame.grid(row=1, column=0, sticky="nsew", padx=6, pady=4)
         scrollable_frame.rowconfigure(1, weight=1)
         scrollable_frame.columnconfigure(0, weight=1)
@@ -1029,32 +1068,39 @@ class ImageDeduplicatorGUI:
         if index == 0:
             self.image_vars[var_name].set(True)
 
-        # Image frame for thumbnail
+        # Image frame for thumbnail (fixed size to avoid pushing buttons out)
         image_frame = ttk.Frame(content_frame)
+        # Use fixed width/height based on self.thumb_size and prevent propagation
+        fw, fh = self.thumb_size
+        image_frame.configure(width=fw, height=fh)
+        image_frame.grid_propagate(False)
         image_frame.grid(row=1, column=0, sticky="nsew")
-        content_frame.rowconfigure(1, weight=1)
+        # Keep the image area from expanding and pushing buttons out
+        content_frame.rowconfigure(1, weight=0)
+
         def update_thumbnail(event=None):
             try:
                 with Image.open(file_info['path']) as img:
                     if img.mode != 'RGB':
                         img = img.convert('RGB')
-                    # Force a smaller initial size for thumbnails
-                    target_size = (150, 150)  # Smaller fixed size for thumbnails
-                    if event:  # Only use frame size for resize events
-                        width = img_frame.winfo_width()
-                        height = img_frame.winfo_height()
-                        if width > 50 and height > 50:  # Valid resize
-                            target_size = (width-20, height-40)
-                    # Create thumbnail at target size
+                    # Always use the fixed thumbnail size for consistency
+                    target_size = self.thumb_size
                     img.thumbnail(target_size, Image.Resampling.LANCZOS)
-                    photo = ImageTk.PhotoImage(img)
+
+                    # Paste thumbnail onto a background to ensure consistent cell size
+                    thumb = Image.new('RGB', target_size, self.palette.get('light_panel', '#0f2230'))
+                    x = (target_size[0] - img.width) // 2
+                    y = (target_size[1] - img.height) // 2
+                    thumb.paste(img, (x, y))
+
+                    photo = ImageTk.PhotoImage(thumb)
                     self.image_thumbnails[var_name] = photo
                     if var_name in self.image_labels:
                         self.image_labels[var_name].configure(image=photo, text="")
                         self.image_labels[var_name].image = photo
                     else:
                         img_label = ttk.Label(image_frame, image=photo, style='ImageCard.TLabel')
-                        img_label.grid(row=0, column=0, pady=5, sticky="nsew")
+                        img_label.grid(row=0, column=0, pady=5, sticky="n")
                         img_label.image = photo
                         image_frame.columnconfigure(0, weight=1)
                         image_frame.rowconfigure(0, weight=1)
@@ -1069,6 +1115,8 @@ class ImageDeduplicatorGUI:
                     image_frame.rowconfigure(0, weight=1)
                     self.image_labels[var_name] = img_label
 
+        # Bind to the frame configure only to refresh thumbnails if needed,
+        # but sizing is fixed so thumbnails will remain consistent.
         img_frame.bind('<Configure>', update_thumbnail)
         update_thumbnail()
         
@@ -1076,8 +1124,14 @@ class ImageDeduplicatorGUI:
         info_text = f"File: {Path(file_info['path']).name}\n"
         info_text += f"Size: {self.deduplicator._format_size(file_info['size'])}"
         
-        info_label = ttk.Label(content_frame, text=info_text, 
-                              justify=tk.LEFT, style='ImageCard.TLabel')
+        # Wrap long filenames so they don't expand the cell width
+        try:
+            info_font = ('Segoe UI', 9)
+        except Exception:
+            info_font = None
+        wrap_px = self.thumb_size[0]
+        info_label = ttk.Label(content_frame, text=info_text,
+                              justify=tk.LEFT, style='ImageCard.TLabel', wraplength=wrap_px, font=info_font)
         info_label.grid(row=2, column=0, pady=(2,5), sticky="w")
         
         # Add action buttons in a grid layout
@@ -1100,10 +1154,10 @@ class ImageDeduplicatorGUI:
         
         # Style for better visibility on light background
         try:
-            self.style.configure('ImageCard.TLabel', background=self.palette['light_panel'], foreground='black')
-            self.style.configure('ImageCard.TCheckbutton', background=self.palette['light_panel'], foreground='black')
+            self.style.configure('ImageCard.TLabel', background=self.palette['light_panel'], foreground=self.palette['text'])
+            self.style.configure('ImageCard.TCheckbutton', background=self.palette['light_panel'], foreground=self.palette['text'])
             self.style.configure('Card.TLabelframe', background=self.palette['light_panel'])
-            self.style.configure('Card.TLabelframe.Label', background=self.palette['light_panel'], foreground='black')
+            self.style.configure('Card.TLabelframe.Label', background=self.palette['light_panel'], foreground=self.palette['text'])
         except Exception:
             pass
     
@@ -1216,7 +1270,7 @@ class ImageDeduplicatorGUI:
         
         # Title
         title_label = ttk.Label(main_frame, text=f"Comparing {len(group['files'])} images", 
-                               font=Font(size=14, weight='bold'))
+                                font=('Segoe UI', 14, 'bold'))
         title_label.pack(pady=(0, 10))
         
         # Create scrollable frame for images
