@@ -1,0 +1,20 @@
+Collecting praw
+  Using cached praw-7.8.1-py3-none-any.whl.metadata (9.4 kB)
+Collecting prawcore<3,>=2.4 (from praw)
+  Using cached prawcore-2.4.0-py3-none-any.whl.metadata (5.0 kB)
+Collecting update_checker>=0.18 (from praw)
+  Using cached update_checker-0.18.0-py3-none-any.whl.metadata (2.3 kB)
+Collecting websocket-client>=0.54.0 (from praw)
+  Using cached websocket_client-1.8.0-py3-none-any.whl.metadata (8.0 kB)
+Requirement already satisfied: requests<3.0,>=2.6.0 in c:\users\aiuser\appdata\local\programs\python\python311\lib\site-packages (from prawcore<3,>=2.4->praw) (2.32.4)
+Requirement already satisfied: charset_normalizer<4,>=2 in c:\users\aiuser\appdata\local\programs\python\python311\lib\site-packages (from requests<3.0,>=2.6.0->prawcore<3,>=2.4->praw) (3.4.3)
+Requirement already satisfied: idna<4,>=2.5 in c:\users\aiuser\appdata\local\programs\python\python311\lib\site-packages (from requests<3.0,>=2.6.0->prawcore<3,>=2.4->praw) (3.10)
+Requirement already satisfied: urllib3<3,>=1.21.1 in c:\users\aiuser\appdata\local\programs\python\python311\lib\site-packages (from requests<3.0,>=2.6.0->prawcore<3,>=2.4->praw) (2.5.0)
+Requirement already satisfied: certifi>=2017.4.17 in c:\users\aiuser\appdata\local\programs\python\python311\lib\site-packages (from requests<3.0,>=2.6.0->prawcore<3,>=2.4->praw) (2025.8.3)
+Using cached praw-7.8.1-py3-none-any.whl (189 kB)
+Using cached prawcore-2.4.0-py3-none-any.whl (17 kB)
+Using cached update_checker-0.18.0-py3-none-any.whl (7.0 kB)
+Using cached websocket_client-1.8.0-py3-none-any.whl (58 kB)
+Installing collected packages: websocket-client, update_checker, prawcore, praw
+
+Successfully installed praw-7.8.1 prawcore-2.4.0 update_checker-0.18.0 websocket-client-1.8.0

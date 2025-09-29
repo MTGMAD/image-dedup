@@ -1,18 +1,40 @@
-# Image Deduplicator Dependencies
-# Core image processing libraries
-# Image Deduplicator Dependencies
-# Core image processing libraries
-Pillow>=9.0.0
-imagehash>=4.3.1
-psutil>=5.8.0
-ttkbootstrap>=1.4.0
+# Image Deduplicator - Enhanced UI/UX Edition
+# Dependencies for professional-grade image duplicate management
 
-# Optional: For enhanced image processing (uncomment if needed)
-# opencv-python>=4.5.0
-# numpy>=1.21.0
+# Core Image Processing Libraries
+Pillow>=9.0.0              # Image processing and manipulation
+imagehash>=4.3.1            # Perceptual hashing for duplicate detection
+psutil>=5.8.0               # System and process utilities
 
-# Development dependencies (uncomment for development)
-# pytest>=6.0.0
-# black>=21.0.0
-# flake8>=3.9.0
+# Modern GUI Framework
+ttkbootstrap>=1.4.0         # Modern themed GUI components
 
+# Export and Reporting Libraries
+reportlab>=4.0.0            # Professional PDF report generation
+openpyxl>=3.0.0             # Excel/CSV export functionality
+
+# Image Analysis and Metadata
+exifread>=3.0.0             # EXIF metadata extraction from images
+numpy>=1.20.0               # Advanced image analysis and difference detection
+
+# Reddit API Integration (Future Ready)
+praw>=7.0.0                 # Python Reddit API Wrapper
+
+# Optional Development Dependencies (uncomment for development)
+# pytest>=6.0.0             # Testing framework
+# black>=21.0.0              # Code formatting
+# flake8>=3.9.0              # Code linting
+# mypy>=0.910                # Static type checking
+
+# Optional Advanced Image Processing (uncomment if needed)
+# opencv-python>=4.5.0      # Advanced computer vision (alternative to basic processing)
+# scikit-image>=0.18.0      # Scientific image processing
+# matplotlib>=3.5.0         # Advanced plotting and visualization
+
+# Notes:
+# - All core dependencies are required for full functionality
+# - reportlab: Required for PDF export feature
+# - numpy: Required for overlay mode difference detection
+# - exifread: Required for camera metadata display
+# - praw: Pre-installed for future Reddit integration features
+# - ttkbootstrap: Provides modern UI theming and enhanced widgets

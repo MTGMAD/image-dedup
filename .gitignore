@@ -46,6 +46,32 @@ Thumbs.db
 *.log
 test_images/
 temp/
+config.py
+*.env
+
+# Enhanced UI/UX Edition - Export outputs
+output/
+exports/
+reports/
+*.pdf
+*.html
+*.csv
+*.json
+
+# Comparison and analysis outputs
+overlays/
+differences/
+thumbnails/
+
+# User settings and cache
+settings.json
+user_preferences.json
+*.cache
+
+# Test files and outputs
+test_*.py
+test_outputs/
+sample_images/
 
 # Build artifacts
 dist/

@@ -1253,49 +1253,147 @@ class ImageDeduplicatorGUI:
         }
     
     def show_comparison(self, group_index, selected_index):
-        """Show side-by-side comparison of images in a group."""
+        """Show enhanced side-by-side comparison of images in a group."""
         if not self.deduplicator or group_index >= len(self.deduplicator.duplicates):
             return
-        
+
         group = self.deduplicator.duplicates[group_index]
-        
-        # Create comparison window
+
+        # Create enhanced comparison window
         comparison_window = tk.Toplevel(self.root)
-        comparison_window.title(f"Image Comparison - Group {group_index + 1}")
-        comparison_window.geometry("1200x800")
-        
-        # Create main frame
-        main_frame = ttk.Frame(comparison_window, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        title_label = ttk.Label(main_frame, text=f"Comparing {len(group['files'])} images", 
-                                font=('Segoe UI', 14, 'bold'))
-        title_label.pack(pady=(0, 10))
-        
-        # Create scrollable frame for images
-        canvas = tk.Canvas(main_frame, bg=self.palette.get('panel'))
-        scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=canvas.xview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
+        comparison_window.title(f"Enhanced Comparison - Group {group_index + 1} ({len(group['files'])} images)")
+        comparison_window.geometry("1400x900")
+        comparison_window.configure(bg=self.palette['bg'])
+
+        # Store reference for refresh after deletions
+        comparison_window.group_index = group_index
+        comparison_window.selected_index = selected_index
+
+        # Create main container
+        main_container = ttk.Frame(comparison_window)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Top control panel
+        control_panel = ttk.LabelFrame(main_container, text="Comparison Controls", padding="10")
+        control_panel.pack(fill=tk.X, pady=(0, 10))
+
+        # Control panel layout
+        controls_left = ttk.Frame(control_panel)
+        controls_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        controls_right = ttk.Frame(control_panel)
+        controls_right.pack(side=tk.RIGHT)
+
+        # Zoom controls
+        ttk.Label(controls_left, text="Zoom:").pack(side=tk.LEFT, padx=(0, 5))
+        comparison_window.zoom_var = tk.DoubleVar(value=1.0)
+
+        # Zoom slider
+        zoom_scale = ttk.Scale(controls_left, from_=0.5, to=3.0, variable=comparison_window.zoom_var,
+                              orient=tk.HORIZONTAL, length=120)
+        zoom_scale.pack(side=tk.LEFT, padx=(0, 5))
+        zoom_scale.bind("<Motion>", lambda e: self.update_comparison_zoom(comparison_window))
+        zoom_scale.bind("<ButtonRelease-1>", lambda e: self.update_comparison_zoom(comparison_window))
+
+        # Manual zoom entry
+        zoom_entry_frame = ttk.Frame(controls_left)
+        zoom_entry_frame.pack(side=tk.LEFT, padx=(5, 0))
+
+        comparison_window.zoom_entry_var = tk.StringVar(value="1.0")
+        zoom_entry = ttk.Entry(zoom_entry_frame, textvariable=comparison_window.zoom_entry_var,
+                              width=6, justify=tk.CENTER)
+        zoom_entry.pack(side=tk.LEFT)
+        zoom_entry.bind("<Return>", lambda e: self.manual_zoom_update(comparison_window))
+        zoom_entry.bind("<FocusOut>", lambda e: self.manual_zoom_update(comparison_window))
+
+        # Quick zoom buttons
+        zoom_buttons_frame = ttk.Frame(controls_left)
+        zoom_buttons_frame.pack(side=tk.LEFT, padx=(10, 20))
+
+        for zoom_val in [0.5, 1.0, 1.5, 2.0]:
+            btn_text = f"{zoom_val}x"
+            ttk.Button(zoom_buttons_frame, text=btn_text, width=4,
+                      command=lambda z=zoom_val: self.set_zoom(comparison_window, z)).pack(side=tk.LEFT, padx=1)
+
+        # Update zoom entry when slider changes
+        comparison_window.zoom_var.trace('w', lambda *args: self.sync_zoom_entry(comparison_window))
+
+        # View mode
+        ttk.Label(controls_left, text="View:").pack(side=tk.LEFT, padx=(0, 5))
+        comparison_window.view_mode = tk.StringVar(value="Side by Side")
+        view_combo = ttk.Combobox(controls_left, textvariable=comparison_window.view_mode,
+                                 values=["Side by Side", "Grid View", "Overlay Mode"],
+                                 state="readonly", width=12)
+        view_combo.pack(side=tk.LEFT, padx=(0, 20))
+        view_combo.bind("<<ComboboxSelected>>", lambda e: self.update_comparison_view(comparison_window))
+
+        # Similarity info
+        similarity = self.calculate_group_similarity(group)
+        ttk.Label(controls_left, text=f"Similarity: {similarity:.1f}%").pack(side=tk.LEFT, padx=(20, 0))
+
+        # Action buttons
+        if 'tb' in globals() and TB_AVAILABLE:
+            ttk.Button(controls_right, text="Export Selection",
+                      command=lambda: self.export_comparison_results(comparison_window, group_index)).pack(side=tk.RIGHT, padx=(5, 0))
+            ttk.Button(controls_right, text="Open All Folders",
+                      command=lambda: self.open_all_image_folders(group)).pack(side=tk.RIGHT, padx=(5, 0))
+            ttk.Button(controls_right, text="Refresh",
+                      command=lambda: self.refresh_comparison_window(comparison_window)).pack(side=tk.RIGHT, padx=(5, 0))
+        else:
+            ttk.Button(controls_right, text="Export Selection",
+                      command=lambda: self.export_comparison_results(comparison_window, group_index)).pack(side=tk.RIGHT, padx=(5, 0))
+            ttk.Button(controls_right, text="Open All Folders",
+                      command=lambda: self.open_all_image_folders(group)).pack(side=tk.RIGHT, padx=(5, 0))
+            ttk.Button(controls_right, text="Refresh",
+                      command=lambda: self.refresh_comparison_window(comparison_window)).pack(side=tk.RIGHT, padx=(5, 0))
+
+        # Main comparison area
+        comparison_area = ttk.Frame(main_container)
+        comparison_area.pack(fill=tk.BOTH, expand=True)
+
+        # Create scrollable canvas for images
+        canvas = tk.Canvas(comparison_area, bg=self.palette['panel'], highlightthickness=0)
+        v_scrollbar = ttk.Scrollbar(comparison_area, orient="vertical", command=canvas.yview)
+        h_scrollbar = ttk.Scrollbar(comparison_area, orient="horizontal", command=canvas.xview)
+        scrollable_frame = tk.Frame(canvas, bg=self.palette['panel'])
+
+        # Configure scrolling
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(xscrollcommand=scrollbar.set)
-        
-        # Display images side by side
-        for i, file_info in enumerate(group['files']):
-            self.create_comparison_widget(scrollable_frame, file_info, i, group_index, selected_index)
-        
-        # Pack canvas and scrollbar
-        canvas.pack(side="top", fill="both", expand=True)
-        scrollbar.pack(side="bottom", fill="x")
-        
+        canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+
+        # Pack canvas and scrollbars
+        canvas.pack(side="left", fill="both", expand=True)
+        v_scrollbar.pack(side="right", fill="y")
+        h_scrollbar.pack(side="bottom", fill="x")
+
+        # Store references
+        comparison_window.canvas = canvas
+        comparison_window.scrollable_frame = scrollable_frame
+        comparison_window.image_widgets = []
+
+        # Create enhanced comparison widgets
+        self.create_enhanced_comparison_widgets(comparison_window, group, group_index, selected_index)
+
+        # Bottom action panel
+        action_panel = ttk.Frame(main_container)
+        action_panel.pack(fill=tk.X, pady=(10, 0))
+
+        # Status and statistics
+        stats_text = f"Group {group_index + 1} | {len(group['files'])} files | "
+        stats_text += f"Space to save: {self.deduplicator._format_size(group['space_saved'])}"
+        ttk.Label(action_panel, text=stats_text).pack(side=tk.LEFT)
+
         # Close button
-        ttk.Button(main_frame, text="Close", command=comparison_window.destroy).pack(pady=10)
+        ttk.Button(action_panel, text="Close Comparison",
+                  command=comparison_window.destroy).pack(side=tk.RIGHT)
+
+        # Bind mouse wheel for scrolling
+        self.bind_mousewheel(canvas)
+
+        # Focus the window
+        comparison_window.focus_set()
+        comparison_window.lift()
     
     def create_comparison_widget(self, parent, file_info, index, group_index, selected_index):
         """Create a comparison widget for an image."""
@@ -1438,7 +1536,1028 @@ class ImageDeduplicatorGUI:
             self.visual_mode_label.config(text="Visual Delete: DRY RUN", foreground="orange")
         else:
             self.visual_mode_label.config(text="Visual Delete: ENABLED", foreground="green")
-    
+
+    def create_enhanced_comparison_widgets(self, comparison_window, group, group_index, selected_index):
+        """Create enhanced comparison widgets with delete functionality."""
+        view_mode = comparison_window.view_mode.get()
+
+        # Clear existing widgets
+        for widget in comparison_window.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        comparison_window.image_widgets.clear()
+
+        if view_mode == "Side by Side":
+            self.create_side_by_side_view(comparison_window, group, group_index, selected_index)
+        elif view_mode == "Grid View":
+            self.create_grid_view(comparison_window, group, group_index, selected_index)
+        elif view_mode == "Overlay Mode":
+            self.create_overlay_view(comparison_window, group, group_index, selected_index)
+
+    def create_side_by_side_view(self, comparison_window, group, group_index, selected_index):
+        """Create side-by-side comparison view."""
+        frame = comparison_window.scrollable_frame
+
+        for i, file_info in enumerate(group['files']):
+            # Create enhanced image widget
+            img_widget = self.create_enhanced_image_widget(frame, file_info, i, group_index,
+                                                          selected_index, comparison_window)
+            img_widget.pack(side=tk.LEFT, padx=10, pady=10, fill=tk.BOTH, expand=True)
+            comparison_window.image_widgets.append(img_widget)
+
+    def create_grid_view(self, comparison_window, group, group_index, selected_index):
+        """Create grid comparison view."""
+        frame = comparison_window.scrollable_frame
+
+        # Calculate grid dimensions
+        num_files = len(group['files'])
+        cols = min(3, num_files)  # Max 3 columns
+        rows = (num_files + cols - 1) // cols
+
+        for i, file_info in enumerate(group['files']):
+            row = i // cols
+            col = i % cols
+
+            # Configure grid weights
+            frame.columnconfigure(col, weight=1)
+            frame.rowconfigure(row, weight=1)
+
+            # Create enhanced image widget
+            img_widget = self.create_enhanced_image_widget(frame, file_info, i, group_index,
+                                                          selected_index, comparison_window)
+            img_widget.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+            comparison_window.image_widgets.append(img_widget)
+
+    def create_overlay_view(self, comparison_window, group, group_index, selected_index):
+        """Create overlay comparison view for detailed pixel comparison."""
+        frame = comparison_window.scrollable_frame
+
+        # Create overlay controls
+        overlay_controls = ttk.LabelFrame(frame, text="Overlay Controls", padding="10")
+        overlay_controls.pack(fill=tk.X, pady=(0, 10))
+
+        # Image selection controls
+        controls_top = ttk.Frame(overlay_controls)
+        controls_top.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(controls_top, text="Base Image:").pack(side=tk.LEFT, padx=(0, 5))
+        comparison_window.base_image_var = tk.IntVar(value=0)
+        base_combo = ttk.Combobox(controls_top, textvariable=comparison_window.base_image_var,
+                                 values=[f"Image {i+1}: {Path(file_info['path']).name[:20]}..."
+                                        for i, file_info in enumerate(group['files'])],
+                                 state="readonly", width=25)
+        base_combo.pack(side=tk.LEFT, padx=(0, 20))
+
+        ttk.Label(controls_top, text="Overlay Image:").pack(side=tk.LEFT, padx=(0, 5))
+        comparison_window.overlay_image_var = tk.IntVar(value=1 if len(group['files']) > 1 else 0)
+        overlay_combo = ttk.Combobox(controls_top, textvariable=comparison_window.overlay_image_var,
+                                    values=[f"Image {i+1}: {Path(file_info['path']).name[:20]}..."
+                                           for i, file_info in enumerate(group['files'])],
+                                    state="readonly", width=25)
+        overlay_combo.pack(side=tk.LEFT, padx=(0, 20))
+
+        # Update overlay when selection changes
+        base_combo.bind("<<ComboboxSelected>>", lambda e: self.update_overlay_display(comparison_window, group))
+        overlay_combo.bind("<<ComboboxSelected>>", lambda e: self.update_overlay_display(comparison_window, group))
+
+        # Opacity controls
+        controls_bottom = ttk.Frame(overlay_controls)
+        controls_bottom.pack(fill=tk.X)
+
+        ttk.Label(controls_bottom, text="Overlay Opacity:").pack(side=tk.LEFT, padx=(0, 5))
+        comparison_window.opacity_var = tk.DoubleVar(value=0.5)
+        opacity_scale = ttk.Scale(controls_bottom, from_=0.0, to=1.0, variable=comparison_window.opacity_var,
+                                 orient=tk.HORIZONTAL, length=200)
+        opacity_scale.pack(side=tk.LEFT, padx=(0, 10))
+        opacity_scale.bind("<Motion>", lambda e: self.safe_update_overlay_opacity(comparison_window, group))
+        opacity_scale.bind("<ButtonRelease-1>", lambda e: self.safe_update_overlay_opacity(comparison_window, group))
+
+        # Opacity percentage display
+        comparison_window.opacity_label = ttk.Label(controls_bottom, text="50%")
+        comparison_window.opacity_label.pack(side=tk.LEFT, padx=(5, 20))
+
+        # Quick opacity buttons
+        for opacity_val in [0.0, 0.25, 0.5, 0.75, 1.0]:
+            btn_text = f"{int(opacity_val*100)}%"
+            ttk.Button(controls_bottom, text=btn_text, width=5,
+                      command=lambda o=opacity_val: self.set_overlay_opacity(comparison_window, group, o)).pack(side=tk.LEFT, padx=1)
+
+        # Difference detection
+        ttk.Button(controls_bottom, text="Highlight Differences",
+                  command=lambda: self.highlight_differences(comparison_window, group)).pack(side=tk.LEFT, padx=(20, 0))
+
+        # Create overlay display area
+        overlay_display_frame = ttk.LabelFrame(frame, text="Overlay Comparison", padding="10")
+        overlay_display_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Store reference for updates
+        comparison_window.overlay_display_frame = overlay_display_frame
+
+        # Create initial overlay
+        self.update_overlay_display(comparison_window, group)
+
+    def create_enhanced_image_widget(self, parent, file_info, index, group_index, selected_index, comparison_window):
+        """Create an enhanced image widget with delete functionality and EXIF data."""
+        # Main container
+        container = ttk.LabelFrame(parent, text=f"Image {index + 1}", style='Card.TLabelframe')
+
+        # Header with selection indicator
+        header_frame = ttk.Frame(container)
+        header_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        if index == selected_index:
+            ttk.Label(header_frame, text="[SELECTED]", foreground="orange",
+                     font=('TkDefaultFont', 9, 'bold')).pack(side=tk.LEFT)
+
+        # Keep/Delete toggle
+        keep_var = tk.BooleanVar(value=(index == 0))  # Keep first by default
+        keep_cb = ttk.Checkbutton(header_frame, text="Keep this image", variable=keep_var)
+        keep_cb.pack(side=tk.RIGHT)
+
+        # Image display area
+        image_area = ttk.Frame(container)
+        image_area.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Load and display image with zoom
+        try:
+            zoom_factor = comparison_window.zoom_var.get()
+            base_size = int(300 * zoom_factor)
+
+            with Image.open(file_info['path']) as img:
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+
+                # Calculate display size
+                img.thumbnail((base_size, base_size), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+
+                # Display image
+                img_label = ttk.Label(image_area, image=photo)
+                img_label.image = photo  # Keep reference
+                img_label.pack(pady=5)
+
+        except Exception as e:
+            error_label = ttk.Label(image_area, text=f"Error loading:\n{str(e)[:30]}...")
+            error_label.pack(pady=5)
+
+        # File information
+        info_frame = ttk.LabelFrame(container, text="File Information", style='Card.TLabelframe')
+        info_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Basic file info
+        file_name = Path(file_info['path']).name
+        info_text = f"Name: {file_name}\n"
+        info_text += f"Size: {self.deduplicator._format_size(file_info['size'])}\n"
+        info_text += f"Dimensions: {file_info['width']}x{file_info['height']}\n"
+        info_text += f"Format: {file_info['format']}"
+
+        # Add EXIF data if available
+        exif_data = self.get_exif_data(file_info['path'])
+        if exif_data:
+            info_text += f"\n\nEXIF Data:\n{exif_data}"
+
+        info_label = ttk.Label(info_frame, text=info_text, justify=tk.LEFT, wraplength=280)
+        info_label.pack(padx=5, pady=5, anchor="w")
+
+        # Action buttons
+        action_frame = ttk.Frame(container)
+        action_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Configure button layout
+        action_frame.columnconfigure(0, weight=1)
+        action_frame.columnconfigure(1, weight=1)
+        action_frame.columnconfigure(2, weight=1)
+
+        # Open folder button
+        ttk.Button(action_frame, text="Open Folder",
+                  command=lambda: self.open_image_folder(file_info['path'])).grid(row=0, column=0, padx=2, sticky="ew")
+
+        # View full size button
+        ttk.Button(action_frame, text="Full Size",
+                  command=lambda: self.view_full_size(file_info['path'])).grid(row=0, column=1, padx=2, sticky="ew")
+
+        # Delete button (your requested feature!)
+        delete_btn = ttk.Button(action_frame, text="Delete Image",
+                               command=lambda: self.delete_from_comparison(file_info['path'], group_index, index, comparison_window),
+                               style="danger.TButton")
+        delete_btn.grid(row=0, column=2, padx=2, sticky="ew")
+
+        return container
+
+    def delete_from_comparison(self, file_path, group_index, image_index, comparison_window):
+        """Delete image from comparison window and refresh."""
+        # Use existing delete logic but refresh comparison window after
+        if self.visual_dry_run_var.get():
+            messagebox.showinfo("Info", "Visual delete dry run mode is enabled. No files will be deleted.")
+            return
+
+        file_name = Path(file_path).name
+
+        # Check confirmation settings
+        if self.skip_visual_confirmation_var.get():
+            try:
+                os.remove(file_path)
+                self.status_var.set(f"Deleted: {file_name}")
+                self.update_after_deletion(group_index, image_index)
+                self.refresh_comparison_window(comparison_window)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete {file_name}:\n{str(e)}")
+        else:
+            result = messagebox.askyesno("Confirm Deletion",
+                                       f"Delete this image?\n\n{file_name}\n\nThis cannot be undone!")
+            if result:
+                try:
+                    os.remove(file_path)
+                    messagebox.showinfo("Success", f"Deleted: {file_name}")
+                    self.update_after_deletion(group_index, image_index)
+                    self.refresh_comparison_window(comparison_window)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to delete {file_name}:\n{str(e)}")
+
+    def get_exif_data(self, file_path):
+        """Extract and format EXIF data from image."""
+        try:
+            import exifread
+            with open(file_path, 'rb') as f:
+                tags = exifread.process_file(f, details=False)
+
+            # Extract useful EXIF data
+            exif_info = []
+            interesting_tags = ['DateTime', 'EXIF DateTime', 'Camera', 'Image Make', 'Image Model',
+                              'EXIF FNumber', 'EXIF ExposureTime', 'EXIF ISOSpeedRatings']
+
+            for tag in interesting_tags:
+                if tag in tags:
+                    exif_info.append(f"{tag}: {tags[tag]}")
+
+            return "\n".join(exif_info[:4])  # Limit to 4 lines
+
+        except Exception:
+            return None
+
+    def calculate_group_similarity(self, group):
+        """Calculate similarity percentage for a group of images."""
+        if len(group['files']) < 2:
+            return 100.0
+
+        # Use the similarity threshold to estimate percentage
+        # Lower threshold = higher similarity
+        threshold_used = self.threshold_var.get()
+        similarity_percentage = max(0, 100 - (threshold_used * 5))
+        return similarity_percentage
+
+    def update_comparison_zoom(self, comparison_window):
+        """Update image zoom in comparison window."""
+        # Refresh the comparison view with new zoom
+        if hasattr(comparison_window, 'group_index'):
+            group = self.deduplicator.duplicates[comparison_window.group_index]
+            self.create_enhanced_comparison_widgets(comparison_window, group,
+                                                   comparison_window.group_index,
+                                                   comparison_window.selected_index)
+
+    def update_comparison_view(self, comparison_window):
+        """Update comparison view mode."""
+        if hasattr(comparison_window, 'group_index'):
+            group = self.deduplicator.duplicates[comparison_window.group_index]
+            self.create_enhanced_comparison_widgets(comparison_window, group,
+                                                   comparison_window.group_index,
+                                                   comparison_window.selected_index)
+
+    def refresh_comparison_window(self, comparison_window):
+        """Refresh comparison window after changes."""
+        if hasattr(comparison_window, 'group_index'):
+            # Check if group still exists
+            if comparison_window.group_index < len(self.deduplicator.duplicates):
+                group = self.deduplicator.duplicates[comparison_window.group_index]
+                self.create_enhanced_comparison_widgets(comparison_window, group,
+                                                       comparison_window.group_index,
+                                                       comparison_window.selected_index)
+            else:
+                # Group was deleted, close window
+                comparison_window.destroy()
+                messagebox.showinfo("Info", "This duplicate group no longer exists.")
+
+    def open_image_folder(self, file_path):
+        """Open the folder containing the image."""
+        import subprocess
+        import platform
+
+        folder_path = str(Path(file_path).parent)
+
+        try:
+            if platform.system() == "Windows":
+                subprocess.run(["explorer", "/select,", file_path])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", "-R", file_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", folder_path])
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open folder:\n{str(e)}")
+
+    def open_all_image_folders(self, group):
+        """Open all folders containing images in the group."""
+        folders = set()
+        for file_info in group['files']:
+            folders.add(str(Path(file_info['path']).parent))
+
+        for folder in folders:
+            try:
+                import subprocess
+                import platform
+
+                if platform.system() == "Windows":
+                    subprocess.run(["explorer", folder])
+                elif platform.system() == "Darwin":  # macOS
+                    subprocess.run(["open", folder])
+                else:  # Linux
+                    subprocess.run(["xdg-open", folder])
+            except Exception:
+                pass  # Silently continue if one fails
+
+    def view_full_size(self, file_path):
+        """Open image in full size view."""
+        try:
+            import subprocess
+            import platform
+
+            if platform.system() == "Windows":
+                subprocess.run(["start", "", file_path], shell=True)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", file_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", file_path])
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open image:\n{str(e)}")
+
+    def export_comparison_results(self, comparison_window, group_index):
+        """Export comparison results for this group."""
+        if not hasattr(comparison_window, 'group_index'):
+            return
+
+        group = self.deduplicator.duplicates[group_index]
+
+        # Ask user for export format
+        export_window = tk.Toplevel(self.root)
+        export_window.title("Export Options")
+        export_window.geometry("400x300")
+        export_window.configure(bg=self.palette['bg'])
+
+        ttk.Label(export_window, text="Select Export Format:", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
+
+        export_format = tk.StringVar(value="JSON")
+        formats = ["JSON", "CSV", "HTML Report", "PDF Report", "Text Summary"]
+
+        for fmt in formats:
+            ttk.Radiobutton(export_window, text=fmt, variable=export_format, value=fmt).pack(anchor="w", padx=20, pady=5)
+
+        button_frame = ttk.Frame(export_window)
+        button_frame.pack(pady=20)
+
+        ttk.Button(button_frame, text="Export",
+                  command=lambda: self.perform_export(group, export_format.get(), export_window)).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="Cancel", command=export_window.destroy).pack(side=tk.LEFT, padx=10)
+
+    def perform_export(self, group, format_type, export_window):
+        """Perform the actual export operation."""
+        from tkinter import filedialog
+        import json
+        import csv
+
+        if format_type == "JSON":
+            file_path = filedialog.asksaveasfilename(defaultextension=".json",
+                                                    filetypes=[("JSON files", "*.json")])
+            if file_path:
+                with open(file_path, 'w') as f:
+                    json.dump(group, f, indent=2, default=str)
+
+        elif format_type == "CSV":
+            file_path = filedialog.asksaveasfilename(defaultextension=".csv",
+                                                    filetypes=[("CSV files", "*.csv")])
+            if file_path:
+                with open(file_path, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(['Index', 'Filename', 'Path', 'Size', 'Width', 'Height', 'Format'])
+                    for i, file_info in enumerate(group['files']):
+                        writer.writerow([i+1, Path(file_info['path']).name, file_info['path'],
+                                       file_info['size'], file_info['width'], file_info['height'],
+                                       file_info['format']])
+
+        elif format_type == "PDF Report":
+            file_path = filedialog.asksaveasfilename(defaultextension=".pdf",
+                                                    filetypes=[("PDF files", "*.pdf")])
+            if file_path:
+                self.create_pdf_report(group, file_path)
+
+        elif format_type == "HTML Report":
+            file_path = filedialog.asksaveasfilename(defaultextension=".html",
+                                                    filetypes=[("HTML files", "*.html")])
+            if file_path:
+                self.create_html_report(group, file_path)
+
+        elif format_type == "Text Summary":
+            file_path = filedialog.asksaveasfilename(defaultextension=".txt",
+                                                    filetypes=[("Text files", "*.txt")])
+            if file_path:
+                self.create_text_summary(group, file_path)
+
+        export_window.destroy()
+        messagebox.showinfo("Success", f"Exported successfully to {format_type} format!")
+
+    def create_pdf_report(self, group, file_path):
+        """Create a comprehensive PDF report for the duplicate group."""
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as ReportLabImage, Table, TableStyle
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
+            import datetime
+
+            # Create document
+            doc = SimpleDocTemplate(file_path, pagesize=A4)
+            styles = getSampleStyleSheet()
+            story = []
+
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                alignment=TA_CENTER,
+                spaceAfter=30
+            )
+            story.append(Paragraph("Image Deduplicator - Duplicate Group Report", title_style))
+            story.append(Spacer(1, 20))
+
+            # Report info
+            report_info = [
+                ['Report Generated:', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+                ['Group Type:', group['type'].title() + ' Duplicates'],
+                ['Number of Files:', str(len(group['files']))],
+                ['Space to Save:', self.deduplicator._format_size(group['space_saved'])]
+            ]
+
+            info_table = Table(report_info, colWidths=[2*inch, 3*inch])
+            info_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(info_table)
+            story.append(Spacer(1, 20))
+
+            # Files section
+            story.append(Paragraph("File Details", styles['Heading2']))
+            story.append(Spacer(1, 10))
+
+            # Create file table
+            file_data = [['#', 'Filename', 'Size', 'Dimensions', 'Format', 'Action']]
+            for i, file_info in enumerate(group['files']):
+                action = "KEEP" if i == 0 else "Delete"
+                file_data.append([
+                    str(i + 1),
+                    Path(file_info['path']).name[:25] + '...' if len(Path(file_info['path']).name) > 25 else Path(file_info['path']).name,
+                    self.deduplicator._format_size(file_info['size']),
+                    f"{file_info['width']}x{file_info['height']}",
+                    file_info['format'],
+                    action
+                ])
+
+            file_table = Table(file_data, colWidths=[0.5*inch, 2.5*inch, 1*inch, 1*inch, 0.8*inch, 0.8*inch])
+            file_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                # Highlight keep vs delete actions
+                ('BACKGROUND', (5, 1), (5, 1), colors.lightgreen),  # KEEP
+                ('BACKGROUND', (5, 2), (5, -1), colors.lightyellow),  # Delete
+            ]))
+            story.append(file_table)
+            story.append(Spacer(1, 20))
+
+            # Recommendations section
+            story.append(Paragraph("Recommendations", styles['Heading2']))
+            story.append(Spacer(1, 10))
+
+            recommendations = [
+                f"• Keep the largest file: {Path(group['keep']['path']).name}",
+                f"• Delete {len(group['delete'])} duplicate files",
+                f"• Total space savings: {self.deduplicator._format_size(group['space_saved'])}",
+                f"• Always backup important files before deletion"
+            ]
+
+            for rec in recommendations:
+                story.append(Paragraph(rec, styles['Normal']))
+                story.append(Spacer(1, 5))
+
+            # Footer
+            story.append(Spacer(1, 30))
+            footer_style = ParagraphStyle(
+                'Footer',
+                parent=styles['Normal'],
+                fontSize=8,
+                alignment=TA_CENTER,
+                textColor=colors.grey
+            )
+            story.append(Paragraph("Generated by Image Deduplicator - Enhanced UI/UX Edition", footer_style))
+
+            # Build PDF
+            doc.build(story)
+
+        except ImportError:
+            messagebox.showerror("Error", "ReportLab library not available. Please install: pip install reportlab")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create PDF: {str(e)}")
+
+    def create_html_report(self, group, file_path):
+        """Create an HTML report for the duplicate group."""
+        import datetime
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Image Deduplicator - Duplicate Group Report</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    margin: 40px;
+                    background-color: #f5f5f5;
+                    color: #333;
+                }}
+                .container {{
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    background: white;
+                    padding: 30px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }}
+                .header {{
+                    text-align: center;
+                    margin-bottom: 30px;
+                    padding-bottom: 20px;
+                    border-bottom: 2px solid #007bff;
+                }}
+                .info-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                    gap: 20px;
+                    margin-bottom: 30px;
+                }}
+                .info-card {{
+                    background: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    border-left: 4px solid #007bff;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 20px 0;
+                }}
+                th, td {{
+                    padding: 12px;
+                    text-align: left;
+                    border-bottom: 1px solid #ddd;
+                }}
+                th {{
+                    background-color: #007bff;
+                    color: white;
+                    font-weight: bold;
+                }}
+                tr:hover {{
+                    background-color: #f5f5f5;
+                }}
+                .keep {{
+                    background-color: #d4edda !important;
+                    color: #155724;
+                }}
+                .delete {{
+                    background-color: #f8d7da !important;
+                    color: #721c24;
+                }}
+                .recommendations {{
+                    background: #e9ecef;
+                    padding: 20px;
+                    border-radius: 5px;
+                    margin-top: 30px;
+                }}
+                .footer {{
+                    text-align: center;
+                    margin-top: 40px;
+                    padding-top: 20px;
+                    border-top: 1px solid #dee2e6;
+                    color: #6c757d;
+                    font-size: 0.9em;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Image Deduplicator</h1>
+                    <h2>Duplicate Group Report</h2>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-card">
+                        <strong>Report Generated:</strong><br>
+                        {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                    </div>
+                    <div class="info-card">
+                        <strong>Group Type:</strong><br>
+                        {group['type'].title()} Duplicates
+                    </div>
+                    <div class="info-card">
+                        <strong>Number of Files:</strong><br>
+                        {len(group['files'])} files
+                    </div>
+                    <div class="info-card">
+                        <strong>Space to Save:</strong><br>
+                        {self.deduplicator._format_size(group['space_saved'])}
+                    </div>
+                </div>
+
+                <h3>File Details</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Filename</th>
+                            <th>Full Path</th>
+                            <th>Size</th>
+                            <th>Dimensions</th>
+                            <th>Format</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        """
+
+        for i, file_info in enumerate(group['files']):
+            action = "KEEP" if i == 0 else "DELETE"
+            row_class = "keep" if i == 0 else "delete"
+            html_content += f"""
+                        <tr class="{row_class}">
+                            <td>{i + 1}</td>
+                            <td>{Path(file_info['path']).name}</td>
+                            <td style="font-size: 0.8em; color: #666;">{file_info['path']}</td>
+                            <td>{self.deduplicator._format_size(file_info['size'])}</td>
+                            <td>{file_info['width']} × {file_info['height']}</td>
+                            <td>{file_info['format']}</td>
+                            <td><strong>{action}</strong></td>
+                        </tr>
+            """
+
+        html_content += f"""
+                    </tbody>
+                </table>
+
+                <div class="recommendations">
+                    <h3>Recommendations</h3>
+                    <ul>
+                        <li>Keep the largest file: <strong>{Path(group['keep']['path']).name}</strong></li>
+                        <li>Delete {len(group['delete'])} duplicate files</li>
+                        <li>Total space savings: <strong>{self.deduplicator._format_size(group['space_saved'])}</strong></li>
+                        <li>Always backup important files before deletion</li>
+                    </ul>
+                </div>
+
+                <div class="footer">
+                    Generated by Image Deduplicator - Enhanced UI/UX Edition
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+    def create_text_summary(self, group, file_path):
+        """Create a simple text summary for the duplicate group."""
+        import datetime
+
+        summary = f"""
+IMAGE DEDUPLICATOR - DUPLICATE GROUP SUMMARY
+{'='*50}
+
+Report Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Group Type: {group['type'].title()} Duplicates
+Number of Files: {len(group['files'])}
+Space to Save: {self.deduplicator._format_size(group['space_saved'])}
+
+FILE DETAILS:
+{'-'*50}
+"""
+
+        for i, file_info in enumerate(group['files']):
+            action = "KEEP" if i == 0 else "DELETE"
+            summary += f"""
+{i + 1}. {Path(file_info['path']).name}
+   Path: {file_info['path']}
+   Size: {self.deduplicator._format_size(file_info['size'])}
+   Dimensions: {file_info['width']} × {file_info['height']}
+   Format: {file_info['format']}
+   Action: {action}
+"""
+
+        summary += f"""
+RECOMMENDATIONS:
+{'-'*50}
+• Keep the largest file: {Path(group['keep']['path']).name}
+• Delete {len(group['delete'])} duplicate files
+• Total space savings: {self.deduplicator._format_size(group['space_saved'])}
+• Always backup important files before deletion
+
+Generated by Image Deduplicator - Enhanced UI/UX Edition
+        """
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(summary)
+
+    def update_overlay_display(self, comparison_window, group):
+        """Update the overlay display with current settings."""
+        try:
+            # Clear existing overlay
+            for widget in comparison_window.overlay_display_frame.winfo_children():
+                widget.destroy()
+
+            # Get selected images with safety checks
+            try:
+                base_idx = comparison_window.base_image_var.get()
+                overlay_idx = comparison_window.overlay_image_var.get()
+            except Exception:
+                # If variables aren't ready, set defaults
+                base_idx = 0
+                overlay_idx = 1 if len(group['files']) > 1 else 0
+                comparison_window.base_image_var.set(base_idx)
+                comparison_window.overlay_image_var.set(overlay_idx)
+
+            if base_idx >= len(group['files']) or overlay_idx >= len(group['files']):
+                return
+
+            base_file = group['files'][base_idx]
+            overlay_file = group['files'][overlay_idx]
+
+            # Get opacity with safety check
+            try:
+                opacity = comparison_window.opacity_var.get()
+                if not isinstance(opacity, (int, float)) or opacity < 0 or opacity > 1:
+                    opacity = 0.5
+                    comparison_window.opacity_var.set(opacity)
+            except Exception:
+                opacity = 0.5
+                comparison_window.opacity_var.set(opacity)
+
+            # Get zoom with safety check
+            try:
+                zoom = comparison_window.zoom_var.get()
+                if not isinstance(zoom, (int, float)) or zoom <= 0:
+                    zoom = 1.0
+                    comparison_window.zoom_var.set(zoom)
+            except Exception:
+                zoom = 1.0
+                comparison_window.zoom_var.set(zoom)
+
+            # Create overlay image
+            overlay_image = self.create_overlay_image(base_file['path'], overlay_file['path'], opacity, zoom)
+
+            if overlay_image:
+                # Display the overlay
+                img_label = ttk.Label(comparison_window.overlay_display_frame, image=overlay_image)
+                img_label.image = overlay_image  # Keep reference
+                img_label.pack(expand=True)
+
+                # Add info below
+                info_text = f"Base: {Path(base_file['path']).name}\n"
+                info_text += f"Overlay: {Path(overlay_file['path']).name}\n"
+                info_text += f"Opacity: {int(opacity * 100)}%"
+
+                info_label = ttk.Label(comparison_window.overlay_display_frame, text=info_text,
+                                     justify=tk.CENTER, font=('TkDefaultFont', 9))
+                info_label.pack(pady=5)
+
+        except Exception as e:
+            print(f"Overlay display error: {e}")
+            error_label = ttk.Label(comparison_window.overlay_display_frame,
+                                  text=f"Error creating overlay: {str(e)[:100]}...")
+            error_label.pack(pady=20)
+
+    def create_overlay_image(self, base_path, overlay_path, opacity, zoom_factor):
+        """Create an overlay image from two source images."""
+        try:
+            # Load both images
+            with Image.open(base_path) as base_img:
+                with Image.open(overlay_path) as overlay_img:
+                    # Convert to RGBA for transparency support
+                    base_img = base_img.convert('RGBA')
+                    overlay_img = overlay_img.convert('RGBA')
+
+                    # Get the maximum dimensions
+                    max_width = max(base_img.width, overlay_img.width)
+                    max_height = max(base_img.height, overlay_img.height)
+
+                    # Create a new image with the maximum dimensions
+                    result = Image.new('RGBA', (max_width, max_height), (255, 255, 255, 0))
+
+                    # Resize base image to fit if needed and paste it
+                    if base_img.size != (max_width, max_height):
+                        base_img = base_img.resize((max_width, max_height), Image.Resampling.LANCZOS)
+                    result.paste(base_img, (0, 0))
+
+                    # Resize overlay image to fit if needed
+                    if overlay_img.size != (max_width, max_height):
+                        overlay_img = overlay_img.resize((max_width, max_height), Image.Resampling.LANCZOS)
+
+                    # Apply opacity to overlay image
+                    overlay_alpha = int(255 * opacity)
+                    overlay_img.putalpha(overlay_alpha)
+
+                    # Composite the images
+                    result = Image.alpha_composite(result, overlay_img)
+
+                    # Convert back to RGB
+                    result = result.convert('RGB')
+
+                    # Apply zoom and create display-sized image
+                    display_size = int(400 * zoom_factor)
+                    result.thumbnail((display_size, display_size), Image.Resampling.LANCZOS)
+
+                    # Convert to PhotoImage
+                    return ImageTk.PhotoImage(result)
+
+        except Exception as e:
+            print(f"Error creating overlay: {e}")
+            return None
+
+    def update_overlay_opacity(self, comparison_window, group):
+        """Update overlay opacity and refresh display."""
+        try:
+            opacity = comparison_window.opacity_var.get()
+            # Ensure it's a valid number
+            if not isinstance(opacity, (int, float)):
+                opacity = 0.5  # Default fallback
+                comparison_window.opacity_var.set(opacity)
+
+            comparison_window.opacity_label.config(text=f"{int(opacity * 100)}%")
+            self.update_overlay_display(comparison_window, group)
+        except Exception as e:
+            print(f"Error updating overlay opacity: {e}")
+            # Reset to safe default
+            comparison_window.opacity_var.set(0.5)
+            comparison_window.opacity_label.config(text="50%")
+
+    def set_overlay_opacity(self, comparison_window, group, opacity):
+        """Set specific opacity value."""
+        comparison_window.opacity_var.set(opacity)
+        self.update_overlay_display(comparison_window, group)
+
+    def safe_update_overlay_opacity(self, comparison_window, group):
+        """Safely update overlay opacity with better error handling."""
+        try:
+            # Only update if we have valid opacity variable
+            if hasattr(comparison_window, 'opacity_var') and comparison_window.opacity_var:
+                self.update_overlay_opacity(comparison_window, group)
+        except Exception as e:
+            print(f"Safe opacity update failed: {e}")
+            # Silently ignore - this prevents the error popup
+
+    def highlight_differences(self, comparison_window, group):
+        """Create a difference map highlighting changes between images."""
+        try:
+            # Get selected images
+            base_idx = comparison_window.base_image_var.get()
+            overlay_idx = comparison_window.overlay_image_var.get()
+
+            if base_idx >= len(group['files']) or overlay_idx >= len(group['files']):
+                return
+
+            base_file = group['files'][base_idx]
+            overlay_file = group['files'][overlay_idx]
+
+            # Create difference image
+            diff_image = self.create_difference_image(base_file['path'], overlay_file['path'],
+                                                    comparison_window.zoom_var.get())
+
+            if diff_image:
+                # Clear existing display
+                for widget in comparison_window.overlay_display_frame.winfo_children():
+                    widget.destroy()
+
+                # Show difference image
+                img_label = ttk.Label(comparison_window.overlay_display_frame, image=diff_image)
+                img_label.image = diff_image  # Keep reference
+                img_label.pack(expand=True)
+
+                # Add info
+                info_text = f"Differences between:\n{Path(base_file['path']).name}\nand {Path(overlay_file['path']).name}\n"
+                info_text += "Red areas show differences"
+
+                info_label = ttk.Label(comparison_window.overlay_display_frame, text=info_text,
+                                     justify=tk.CENTER, font=('TkDefaultFont', 9))
+                info_label.pack(pady=5)
+
+                # Add button to return to overlay mode
+                ttk.Button(comparison_window.overlay_display_frame, text="Back to Overlay",
+                          command=lambda: self.update_overlay_display(comparison_window, group)).pack(pady=5)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not create difference map: {str(e)}")
+
+    def create_difference_image(self, base_path, overlay_path, zoom_factor):
+        """Create an image highlighting differences between two images."""
+        try:
+            import numpy as np
+
+            # Load both images
+            with Image.open(base_path) as base_img:
+                with Image.open(overlay_path) as overlay_img:
+                    # Convert to RGB and resize to same dimensions
+                    base_img = base_img.convert('RGB')
+                    overlay_img = overlay_img.convert('RGB')
+
+                    # Resize to match
+                    max_width = max(base_img.width, overlay_img.width)
+                    max_height = max(base_img.height, overlay_img.height)
+
+                    base_img = base_img.resize((max_width, max_height), Image.Resampling.LANCZOS)
+                    overlay_img = overlay_img.resize((max_width, max_height), Image.Resampling.LANCZOS)
+
+                    # Convert to numpy arrays
+                    base_array = np.array(base_img)
+                    overlay_array = np.array(overlay_img)
+
+                    # Calculate absolute difference
+                    diff_array = np.abs(base_array.astype(np.int16) - overlay_array.astype(np.int16))
+
+                    # Create difference threshold (adjust sensitivity)
+                    threshold = 30
+                    diff_mask = np.any(diff_array > threshold, axis=2)
+
+                    # Create colored difference image
+                    result_array = base_array.copy()
+                    result_array[diff_mask] = [255, 0, 0]  # Red for differences
+
+                    # Convert back to PIL Image
+                    result = Image.fromarray(result_array.astype(np.uint8))
+
+                    # Apply zoom and create display-sized image
+                    display_size = int(400 * zoom_factor)
+                    result.thumbnail((display_size, display_size), Image.Resampling.LANCZOS)
+
+                    return ImageTk.PhotoImage(result)
+
+        except ImportError:
+            messagebox.showwarning("Feature Unavailable",
+                                 "Difference highlighting requires NumPy.\nInstall with: pip install numpy")
+            return None
+        except Exception as e:
+            print(f"Error creating difference image: {e}")
+            return None
+
+    def manual_zoom_update(self, comparison_window):
+        """Update zoom from manual entry."""
+        try:
+            zoom_value = float(comparison_window.zoom_entry_var.get())
+            # Clamp to valid range
+            zoom_value = max(0.1, min(5.0, zoom_value))
+            comparison_window.zoom_var.set(zoom_value)
+            self.update_comparison_zoom(comparison_window)
+        except ValueError:
+            # Invalid input, reset to current value
+            comparison_window.zoom_entry_var.set(f"{comparison_window.zoom_var.get():.1f}")
+
+    def sync_zoom_entry(self, comparison_window):
+        """Sync zoom entry field with slider value."""
+        zoom_value = comparison_window.zoom_var.get()
+        comparison_window.zoom_entry_var.set(f"{zoom_value:.1f}")
+
+    def set_zoom(self, comparison_window, zoom_value):
+        """Set zoom to specific value."""
+        comparison_window.zoom_var.set(zoom_value)
+        self.update_comparison_zoom(comparison_window)
+
+    def bind_mousewheel(self, canvas):
+        """Bind mouse wheel scrolling to canvas."""
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+        canvas.bind("<MouseWheel>", on_mousewheel)
+
     def run(self):
         """Start the GUI application."""
         self.root.mainloop()

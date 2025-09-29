@@ -1,0 +1,6 @@
+Collecting ttkbootstrap
+  Using cached ttkbootstrap-1.14.2-py3-none-any.whl.metadata (5.5 kB)
+Requirement already satisfied: pillow<11,>=10 in c:\users\aiuser\appdata\local\programs\python\python311\lib\site-packages (from ttkbootstrap) (10.4.0)
+Using cached ttkbootstrap-1.14.2-py3-none-any.whl (152 kB)
+Installing collected packages: ttkbootstrap
+Successfully installed ttkbootstrap-1.14.2
